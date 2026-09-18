@@ -26,6 +26,9 @@ jobs:
       - name: Install declared pipeline dependency
         run: python -m pip install -r packages/real-estate-pipeline/requirements.txt
 
+      - name: Install FFmpeg runtime dependency
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y ffmpeg
+
       - name: Compile application and pipeline
         run: python -m py_compile apps/creative-studio/app.py packages/real-estate-pipeline/src/pipeline.py scripts/verify_local.py
 
