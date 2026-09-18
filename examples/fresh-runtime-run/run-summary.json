@@ -53,6 +53,12 @@
     "body_bytes": 0,
     "containment_rejection": 404
   },
+  "openrouter_preflight": {
+    "status": "PASS",
+    "missing_configuration_http_status": 400,
+    "partial_run_directories": 0,
+    "external_effects": "DISABLED"
+  },
   "non_blocking_observation": {
     "status": "RESOLVED",
     "issue": "https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/6",
