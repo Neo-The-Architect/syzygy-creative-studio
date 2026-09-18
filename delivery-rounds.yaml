@@ -189,12 +189,15 @@ issues:
   - id: ISSUE-0012
     fingerprint: sha256:run-concurrency-and-storage-quotas
     severity: medium
-    status: open
+    status: resolved
     round_found: security
     activation_blocking: false
     evidence:
       - apps/creative-studio/app.py
+      - apps/creative-studio/tests/test_app.py
       - packages/real-estate-pipeline/src/pipeline.py
+      - commit:856eec3050d44ea02615536fd68c6e67acf25cac
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/actions/runs/35344923015
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/11
 release:
   requested: false
