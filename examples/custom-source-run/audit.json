@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "boundary": "LOCAL_GENERATION_AND_RENDER",
+  "provider": "deterministic",
+  "claims_supported": 6,
+  "selected_images": 6,
+  "outputs_exist": {
+    "reel": true,
+    "brochure": true
+  },
+  "external_publication": "NOT_ATTEMPTED",
+  "delivery": "NOT_CONFIRMED"
+}
