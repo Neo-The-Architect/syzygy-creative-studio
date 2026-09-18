@@ -173,6 +173,49 @@ def render_app_prototype(source: dict[str, Any], prompt: str, destination: Path)
     return {"app": "artifacts/app/index.html"}
 
 
+def render_content_pack(source: dict[str, Any], prompt: str, pipeline_result: dict[str, Any], destination: Path) -> dict[str, str]:
+    """Write local, reviewable platform drafts without attempting publication."""
+    destination.mkdir(parents=True, exist_ok=True)
+    copy = pipeline_result.get("campaign", {}).get("copy", {})
+    address = str(source.get("address", "Approved source"))
+    facts = f"{source.get('beds', '?')} beds · {source.get('baths', '?')} baths · {source.get('area_sqft', '?')} sq ft"
+    caption = str(copy.get("social_caption", f"Now presenting {address}. {facts}."))
+    video_script = str(copy.get("video_script", f"Welcome to {address}. {facts}."))
+    drafts = {
+        "content_pack_version": "creative.content-pack@1.0.0",
+        "status": "DRAFT_NEEDS_REVIEW",
+        "source": {"address": address, "source_url": source.get("source_url")},
+        "brief": prompt,
+        "platform_drafts": {
+            "instagram": {"format": "caption", "text": caption, "approval": "REQUIRED"},
+            "tiktok": {"format": "short_video_caption", "text": caption, "approval": "REQUIRED"},
+            "youtube": {"format": "long_form_description", "text": video_script, "approval": "REQUIRED"},
+            "linkedin": {"format": "post", "text": caption, "approval": "REQUIRED"},
+        },
+        "content_calendar": [{"slot": "next_available", "status": "DRAFT", "platforms": ["instagram", "tiktok", "youtube", "linkedin"]}],
+        "external_effects": "NOT_ATTEMPTED",
+        "publishing": "DISABLED",
+    }
+    json_path = destination / "content-pack.json"
+    json_path.write_text(json.dumps(drafts, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    markdown = [
+        "# Content pack — draft only",
+        "",
+        f"Source: {address}",
+        f"Brief: {prompt}",
+        "",
+        "External publishing is disabled. Each platform draft requires explicit review and platform authorization.",
+        "",
+    ]
+    for platform, draft in drafts["platform_drafts"].items():
+        markdown.extend([f"## {platform}", "", draft["text"], "", "Approval: REQUIRED", ""])
+    (destination / "content-pack.md").write_text("\n".join(markdown), encoding="utf-8")
+    return {
+        "content_json": "artifacts/content/content-pack.json",
+        "content_markdown": "artifacts/content/content-pack.md",
+    }
+
+
 def import_pipeline() -> Any:
     if str(PIPELINE_SRC) not in sys.path:
         sys.path.insert(0, str(PIPELINE_SRC))
@@ -347,7 +390,7 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
     output_targets = payload.get("output_targets") or ["video"]
     if not isinstance(output_targets, list) or not output_targets:
         raise ValueError("output_targets must be a non-empty list")
-    allowed_targets = {"video", "website", "presentation", "app"}
+    allowed_targets = {"video", "website", "presentation", "app", "content"}
     unsupported_targets = sorted(set(output_targets) - allowed_targets)
     if unsupported_targets:
         raise ValueError(f"unsupported output target(s): {', '.join(unsupported_targets)}")
@@ -422,6 +465,8 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
         generated_artifacts.update(render_presentation(source, prompt, artifacts_dir / "presentation"))
     if "app" in output_targets:
         generated_artifacts.update(render_app_prototype(source, prompt, artifacts_dir / "app"))
+    if "content" in output_targets:
+        generated_artifacts.update(render_content_pack(source, prompt, pipeline_result, artifacts_dir / "content"))
     run_record["artifacts"] = generated_artifacts
 
     hyperframes_dir = run_dir / "hyperframes"

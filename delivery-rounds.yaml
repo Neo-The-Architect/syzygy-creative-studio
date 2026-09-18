@@ -30,6 +30,7 @@ rounds:
       - packages/real-estate-pipeline/tests/test_pipeline.py
       - examples/idempotency-run/run-summary.json
       - examples/exported-run/run-summary.json
+      - examples/content-pack-run/run-summary.json
   security:
     status: pending
     evidence: []

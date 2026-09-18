@@ -3,7 +3,8 @@
 Syzygy Creative Studio is an open-source, local-first creative automation studio.
 It turns an approved source package and a plain-language creative brief into
 inspectable artifacts such as cinematic video, websites, presentations, and
-interactive local application prototypes.
+interactive local application prototypes, plus reviewable platform content
+drafts.
 
 The project is designed to run on local hardware or operator-controlled remote
 infrastructure. It uses OpenRouter as an optional reasoning/model-routing plane
@@ -44,6 +45,11 @@ After a run reaches `RENDERED`, the operator can call
 `POST /api/runs/{run_id}/export` to create a local ZIP containing the source,
 plan, checks, receipts, generated artifacts, and a file-hash manifest. Export
 is a local handoff state (`EXPORTED`), not a publish or deployment action.
+
+The optional `content` output target creates Instagram, TikTok, YouTube, and
+LinkedIn drafts plus a local content-calendar entry. They are marked
+`DRAFT_NEEDS_REVIEW`; publishing remains disabled and requires separate
+platform authorization.
 
 ## Run the application
 

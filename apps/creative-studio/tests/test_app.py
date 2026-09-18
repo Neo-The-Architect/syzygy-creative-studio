@@ -101,7 +101,7 @@ class CreativeStudioMvpTests(unittest.TestCase):
                 result = app.create_run(
                     {
                         "prompt": "Create a modern listing film.",
-                        "output_targets": ["video", "website", "presentation", "app"],
+                        "output_targets": ["video", "website", "presentation", "app", "content"],
                         "source": {
                             "source_url": "local://approved-custom",
                             "address": "42 Signal Street, Testville",
@@ -126,12 +126,18 @@ class CreativeStudioMvpTests(unittest.TestCase):
                 self.assertIn("42 Signal Street", presentation)
                 prototype = (app.RUNS_ROOT / "run-test-004" / "artifacts" / "app" / "index.html").read_text(encoding="utf-8")
                 self.assertIn("42 Signal Street", prototype)
+                content = json.loads((app.RUNS_ROOT / "run-test-004" / "artifacts" / "content" / "content-pack.json").read_text(encoding="utf-8"))
+                self.assertEqual(content["status"], "DRAFT_NEEDS_REVIEW")
+                self.assertEqual(content["publishing"], "DISABLED")
+                self.assertIn("42 Signal Street", content["platform_drafts"]["instagram"]["text"])
                 self.assertEqual(
                     result["artifacts"],
                     {
                         "website": "artifacts/website/index.html",
                         "presentation": "artifacts/presentation/index.html",
                         "app": "artifacts/app/index.html",
+                        "content_json": "artifacts/content/content-pack.json",
+                        "content_markdown": "artifacts/content/content-pack.md",
                     },
                 )
             finally:
