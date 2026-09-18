@@ -79,6 +79,13 @@ whether the service is already healthy without starting another process.
 
 Open `http://127.0.0.1:8765`.
 
+Loopback mode intentionally has no login because the service is restricted to
+the local machine. If remote binding is explicitly enabled, set both
+`SYZYGY_CREATIVE_STUDIO_ALLOW_NON_LOOPBACK=1` and a secret
+`SYZYGY_CREATIVE_STUDIO_AUTH_TOKEN`; every API, run, artifact, approval,
+render, and export request must then include `Authorization: Bearer <token>`.
+Do not put the token in source, fixtures, logs, or public artifacts.
+
 Run one complete deterministic fixture:
 
 ```powershell

@@ -140,6 +140,49 @@ class CreativeStudioMvpTests(unittest.TestCase):
                 thread.join(timeout=5)
                 app.RUNS_ROOT = old_runs
 
+    def test_non_loopback_api_requires_bearer_token(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            app.RUNS_ROOT = Path(temp) / "runs"
+            server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.StudioHandler)
+            server.server_address = ("0.0.0.0", server.server_address[1])
+            server.auth_token = "test-auth-token"
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_address[1]}"
+            try:
+                with self.assertRaises(urllib.error.HTTPError) as unauthorized:
+                    urllib.request.urlopen(base + "/api/runs", timeout=5)
+                self.assertEqual(unauthorized.exception.code, 401)
+
+                request = urllib.request.Request(
+                    base + "/api/runs",
+                    headers={"Authorization": "Bearer test-auth-token"},
+                )
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    self.assertEqual(response.status, 200)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
+                app.RUNS_ROOT = old_runs
+
+    def test_loopback_api_remains_unauthenticated(self):
+        server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.StudioHandler)
+        server.auth_token = "test-auth-token"
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        try:
+            with urllib.request.urlopen(base + "/api/health", timeout=5) as response:
+                self.assertEqual(response.status, 200)
+            with urllib.request.urlopen(base + "/api/runs", timeout=5) as response:
+                self.assertEqual(response.status, 200)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
     def test_create_run_reaches_review_without_external_effects(self):
         with tempfile.TemporaryDirectory() as temp:
             old_runs = app.RUNS_ROOT

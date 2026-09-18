@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 from html import escape
 import ipaddress
 import json
@@ -55,6 +56,7 @@ DATA_ROOT = ROOT / "data"
 RUNS_ROOT = DATA_ROOT / "runs"
 WEB_ROOT = ROOT / "web"
 MAX_REQUEST_BYTES = 2 * 1024 * 1024
+AUTH_TOKEN_ENV = "SYZYGY_CREATIVE_STUDIO_AUTH_TOKEN"
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
@@ -756,6 +758,23 @@ def export_run(run_id: str) -> dict[str, Any]:
 class StudioHandler(BaseHTTPRequestHandler):
     server_version = "SyzygyCreativeStudio/0.1"
 
+    def requires_authentication(self) -> bool:
+        """Require an operator token whenever the listener is not loopback-only."""
+        return not is_loopback_host(str(self.server.server_address[0]))
+
+    def authorized(self) -> bool:
+        if not self.requires_authentication():
+            return True
+        expected = str(getattr(self.server, "auth_token", ""))
+        supplied = self.headers.get("Authorization", "")
+        return bool(expected) and hmac.compare_digest(supplied, f"Bearer {expected}")
+
+    def require_authorization(self) -> bool:
+        if self.authorized():
+            return True
+        self.send_json({"error": "authentication required"}, HTTPStatus.UNAUTHORIZED)
+        return False
+
     def send_json(self, value: Any, status: int = HTTPStatus.OK, head_only: bool = False) -> None:
         body = json.dumps(value, indent=2, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -781,6 +800,8 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
         if request_path == "/api/health":
             self.send_json({"status": "PASS", "service": "syzygy-creative-studio", "external_effects": "DISABLED"}, head_only=True)
+            return
+        if not self.require_authorization():
             return
         if request_path.startswith("/api/runs/") and "/artifacts/" in request_path:
             prefix, relative = request_path.split("/artifacts/", 1)
@@ -824,6 +845,8 @@ class StudioHandler(BaseHTTPRequestHandler):
         if request_path == "/api/health":
             self.send_json({"status": "PASS", "service": "syzygy-creative-studio", "external_effects": "DISABLED"})
             return
+        if not self.require_authorization():
+            return
         if request_path == "/api/runs":
             self.send_json({"runs": list_runs()})
             return
@@ -857,6 +880,8 @@ class StudioHandler(BaseHTTPRequestHandler):
         self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:  # noqa: N802
+        if not self.require_authorization():
+            return
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
@@ -914,7 +939,11 @@ def main() -> int:
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
     if not is_loopback_host(args.host) and os.environ.get("SYZYGY_CREATIVE_STUDIO_ALLOW_NON_LOOPBACK") != "1":
         parser.error("non-loopback binding requires SYZYGY_CREATIVE_STUDIO_ALLOW_NON_LOOPBACK=1")
+    auth_token = os.environ.get(AUTH_TOKEN_ENV, "").strip()
+    if not is_loopback_host(args.host) and not auth_token:
+        parser.error(f"non-loopback binding requires {AUTH_TOKEN_ENV}")
     server = ThreadingHTTPServer((args.host, args.port), StudioHandler)
+    server.auth_token = auth_token
     print(f"Syzygy Creative Studio listening at http://{args.host}:{args.port}")
     try:
         server.serve_forever()
