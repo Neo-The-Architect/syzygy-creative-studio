@@ -32,6 +32,9 @@ class CreativeStudioMvpTests(unittest.TestCase):
                 composition = (app.RUNS_ROOT / "run-test-001" / "hyperframes" / "index.html").read_text(encoding="utf-8")
                 self.assertIn("100 Example", composition)
                 self.assertIn("$625,000", composition)
+                website = (app.RUNS_ROOT / "run-test-001" / "artifacts" / "website" / "index.html").read_text(encoding="utf-8")
+                self.assertIn("100 Example Avenue", website)
+                self.assertIn("open kitchen", website)
             finally:
                 app.RUNS_ROOT = old_runs
                 os.environ.pop("SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES", None)

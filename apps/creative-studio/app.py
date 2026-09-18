@@ -115,6 +115,19 @@ def build_creative_plan(prompt: str, source: dict[str, Any], output_targets: lis
     }
 
 
+def render_website(source: dict[str, Any], prompt: str, destination: Path) -> dict[str, str]:
+    destination.mkdir(parents=True, exist_ok=True)
+    features = "".join(f"<li>{str(feature)}</li>" for feature in source.get("features", []))
+    address = str(source.get("address", "Approved source"))
+    html = f"""<!doctype html>
+<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{address} | Creative Studio</title>
+<style>body{{margin:0;background:#08131f;color:#eef7fb;font:16px/1.5 system-ui,sans-serif}}main{{max-width:980px;margin:auto;padding:72px 28px}}.eyebrow{{color:#e8b968;text-transform:uppercase;letter-spacing:.16em;font-size:11px}}h1{{font-size:clamp(42px,8vw,86px);line-height:.98;max-width:760px}}.facts{{display:flex;gap:18px;flex-wrap:wrap;color:#9ec3d0}}.facts strong{{color:#fff}}.card{{margin-top:48px;padding:24px;border:1px solid #24455b;border-radius:18px;background:#102638}}li{{margin:8px 0}}small{{color:#89a9bb}}</style></head>
+<body><main><div class=\"eyebrow\">Syzygy Creative Studio · local artifact</div><h1>{address}</h1><p>{prompt}</p><div class=\"facts\"><span><strong>{source.get('price','Price on request')}</strong></span><span><strong>{source.get('beds','?')}</strong> beds</span><span><strong>{source.get('baths','?')}</strong> baths</span><span><strong>{source.get('area_sqft','?')}</strong> sq ft</span></div><section class=\"card\"><div class=\"eyebrow\">Supported features</div><ul>{features}</ul><small>Generated from an approved local source package. Verify before publishing.</small></section></main></body></html>"""
+    path = destination / "index.html"
+    path.write_text(html, encoding="utf-8")
+    return {"website": "artifacts/website/index.html"}
+
+
 def import_pipeline() -> Any:
     if str(PIPELINE_SRC) not in sys.path:
         sys.path.insert(0, str(PIPELINE_SRC))
@@ -247,6 +260,11 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
     }
     write_json(run_dir / "plan.json", run_record["plan"])
 
+    generated_artifacts: dict[str, str] = {}
+    if "website" in output_targets:
+        generated_artifacts.update(render_website(source, prompt, artifacts_dir / "website"))
+    run_record["artifacts"] = generated_artifacts
+
     hyperframes_dir = run_dir / "hyperframes"
     copy_hyperframes_project(hyperframes_dir, {"run_id": run_id, "request": request}, source)
     run_record["composition"] = {"path": "hyperframes", "source": "editable_project_folder"}
@@ -266,6 +284,7 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
         "source_sha256": run_record["source_manifest"]["sha256"],
         "plan_sha256": digest_file(run_dir / "plan.json"),
         "pipeline_audit": "artifacts/audit.json",
+        "generated_artifacts": generated_artifacts,
         "hyperframes_check": "hyperframes-check.json",
         "external_effects": "NOT_ATTEMPTED",
         "qualification_boundary": "LOCAL_SOURCE_TO_PREVIEW",

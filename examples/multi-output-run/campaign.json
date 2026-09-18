@@ -1,0 +1,125 @@
+{
+  "status": "READY_FOR_REVIEW",
+  "created_at": "2026-09-18T07:54:46.040041+00:00",
+  "property": {
+    "price": "$710,000",
+    "features": [
+      "studio",
+      "garden"
+    ],
+    "baths": 3,
+    "description": "Synthetic custom fixture.",
+    "address": "42 Signal Street, Testville",
+    "source_url": "local://approved-custom-website",
+    "area_sqft": 2400,
+    "beds": 4
+  },
+  "claims": [
+    {
+      "claim_id": "claim-address",
+      "field": "address",
+      "value": "42 Signal Street, Testville",
+      "status": "SUPPORTED",
+      "evidence": [
+        {
+          "source": "local://approved-custom-website",
+          "locator": "property.address"
+        }
+      ]
+    },
+    {
+      "claim_id": "claim-price",
+      "field": "price",
+      "value": "$710,000",
+      "status": "SUPPORTED",
+      "evidence": [
+        {
+          "source": "local://approved-custom-website",
+          "locator": "property.price"
+        }
+      ]
+    },
+    {
+      "claim_id": "claim-beds",
+      "field": "beds",
+      "value": 4,
+      "status": "SUPPORTED",
+      "evidence": [
+        {
+          "source": "local://approved-custom-website",
+          "locator": "property.beds"
+        }
+      ]
+    },
+    {
+      "claim_id": "claim-baths",
+      "field": "baths",
+      "value": 3,
+      "status": "SUPPORTED",
+      "evidence": [
+        {
+          "source": "local://approved-custom-website",
+          "locator": "property.baths"
+        }
+      ]
+    },
+    {
+      "claim_id": "claim-area_sqft",
+      "field": "area_sqft",
+      "value": 2400,
+      "status": "SUPPORTED",
+      "evidence": [
+        {
+          "source": "local://approved-custom-website",
+          "locator": "property.area_sqft"
+        }
+      ]
+    },
+    {
+      "claim_id": "claim-features",
+      "field": "features",
+      "value": [
+        "studio",
+        "garden"
+      ],
+      "status": "SUPPORTED",
+      "evidence": [
+        {
+          "source": "local://approved-custom-website",
+          "locator": "property.features"
+        }
+      ]
+    }
+  ],
+  "selected_images": [
+    "C:\\Users\\Jax 16\\Documents\\Syzygy Creative Studio\\apps\\creative-studio\\data\\runs\\run-20260918T075411Z-67caf6d4\\inputs\\images\\01-exterior.png",
+    "C:\\Users\\Jax 16\\Documents\\Syzygy Creative Studio\\apps\\creative-studio\\data\\runs\\run-20260918T075411Z-67caf6d4\\inputs\\images\\02-living-room.png",
+    "C:\\Users\\Jax 16\\Documents\\Syzygy Creative Studio\\apps\\creative-studio\\data\\runs\\run-20260918T075411Z-67caf6d4\\inputs\\images\\03-kitchen.png",
+    "C:\\Users\\Jax 16\\Documents\\Syzygy Creative Studio\\apps\\creative-studio\\data\\runs\\run-20260918T075411Z-67caf6d4\\inputs\\images\\04-office.png",
+    "C:\\Users\\Jax 16\\Documents\\Syzygy Creative Studio\\apps\\creative-studio\\data\\runs\\run-20260918T075411Z-67caf6d4\\inputs\\images\\05-patio.png",
+    "C:\\Users\\Jax 16\\Documents\\Syzygy Creative Studio\\apps\\creative-studio\\data\\runs\\run-20260918T075411Z-67caf6d4\\inputs\\images\\06-primary-bedroom.png"
+  ],
+  "copy": {
+    "title": "42 Signal Street, Testville \u2014 a considered home with room to live well",
+    "description": "Discover 42 Signal Street, Testville, offered at $710,000. This 4 beds | 3 baths | 2400 sq ft property highlights studio, garden. Schedule a private showing to explore the home and confirm details in person.",
+    "social_caption": "Now presenting 42 Signal Street, Testville. 4 beds | 3 baths | 2400 sq ft. Highlights: studio, garden. Request the full details or schedule a showing.",
+    "email_subject": "A closer look at 42 Signal Street, Testville",
+    "video_script": "Welcome to 42 Signal Street, Testville. This 4 beds | 3 baths | 2400 sq ft home brings together studio, garden. Explore the spaces, then contact the listing team to arrange a showing.",
+    "cta": "Request details or schedule a private showing",
+    "alt_text": "Property marketing image for 42 Signal Street, Testville",
+    "claim_ids": [
+      "claim-address",
+      "claim-price",
+      "claim-beds",
+      "claim-baths",
+      "claim-area_sqft",
+      "claim-features"
+    ],
+    "provider": "deterministic"
+  },
+  "assets": {
+    "reel": "C:\\Users\\Jax 16\\Documents\\Syzygy Creative Studio\\apps\\creative-studio\\data\\runs\\run-20260918T075411Z-67caf6d4\\artifacts\\reel_final.mp4",
+    "brochure": "C:\\Users\\Jax 16\\Documents\\Syzygy Creative Studio\\apps\\creative-studio\\data\\runs\\run-20260918T075411Z-67caf6d4\\artifacts\\brochure_final.mp4"
+  },
+  "external_effects": "DISABLED"
+}

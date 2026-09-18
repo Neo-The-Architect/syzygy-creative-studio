@@ -1,0 +1,109 @@
+{
+  "run_id": "run-20260918T075411Z-67caf6d4",
+  "status": "APPROVED",
+  "request": {
+    "prompt": "Create a cinematic listing film and landing page for 42 Signal Street.",
+    "provider": "deterministic",
+    "output_targets": [
+      "video",
+      "website"
+    ],
+    "created_at": "2026-09-18T07:54:11.903099+00:00",
+    "external_effects": "NOT_ATTEMPTED"
+  },
+  "source_manifest": {
+    "path": "inputs/source.json",
+    "sha256": "921b9366090745bf9861922b1cd1b9495c405db433c46c2b3b3f40e4be8b758f"
+  },
+  "plan": {
+    "schema_version": "creative.plan@1.1.0",
+    "brief": "Create a cinematic listing film and landing page for 42 Signal Street.",
+    "output_targets": [
+      "video",
+      "website"
+    ],
+    "provider": "deterministic",
+    "mode": "DETERMINISTIC_FIXTURE",
+    "source_facts": {
+      "address": "42 Signal Street, Testville",
+      "price": "$710,000",
+      "beds": 4,
+      "baths": 3,
+      "area_sqft": 2400,
+      "features": [
+        "studio",
+        "garden"
+      ]
+    },
+    "beats": [
+      {
+        "id": "signal",
+        "purpose": "establish the creative promise",
+        "duration_seconds": 3
+      },
+      {
+        "id": "arrival",
+        "purpose": "introduce the source subject",
+        "duration_seconds": 4
+      },
+      {
+        "id": "details",
+        "purpose": "show supported features",
+        "duration_seconds": 6
+      },
+      {
+        "id": "handoff",
+        "purpose": "present the review or CTA handoff",
+        "duration_seconds": 4
+      }
+    ]
+  },
+  "pipeline": {
+    "status": "PASS",
+    "boundary": "LOCAL_GENERATION_AND_RENDER",
+    "provider": "deterministic",
+    "claims_supported": 6,
+    "selected_images": 6,
+    "outputs_exist": {
+      "reel": true,
+      "brochure": true
+    },
+    "external_publication": "NOT_ATTEMPTED",
+    "delivery": "NOT_CONFIRMED"
+  },
+  "external_effects": "NOT_ATTEMPTED",
+  "created_at": "2026-09-18T07:54:11.903099+00:00",
+  "artifacts": {
+    "website": "artifacts/website/index.html"
+  },
+  "composition": {
+    "path": "hyperframes",
+    "source": "editable_project_folder"
+  },
+  "checks": {
+    "status": "PASS",
+    "returncode": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"strict\": true,\n  \"lint\": {\n    \"ok\": true,\n    \"errorCount\": 0,\n    \"warningCount\": 0,\n    \"infoCount\": 0,\n    \"findings\": [],\n    \"filesScanned\": 1\n  },\n  \"runtime\": {\n    \"ok\": true,\n    \"errorCount\": 0,\n    \"warningCount\": 0,\n    \"infoCount\": 0,\n    \"findings\": []\n  },\n  \"layout\": {\n    \"ok\": true,\n    \"errorCount\": 0,\n    \"warningCount\": 0,\n    \"infoCount\": 0,\n    \"findings\": [],\n    \"duration\": 18,\n    \"samples\": [\n      1,\n      3,\n      5,\n      7,\n      9,\n      11,\n      13,\n      15,\n      17\n    ],\n    \"transitionSamples\": [],\n    \"transitionSamplesDropped\": 0,\n    \"tolerance\": 2,\n    \"totalIssueCount\": 0,\n    \"truncated\": false\n  },\n  \"motion\": {\n    \"ok\": true,\n    \"errorCount\": 0,\n    \"warningCount\": 0,\n    \"infoCount\": 0,\n    \"findings\": [],\n    \"enabled\": false,\n    \"samples\": 0\n  },\n  \"contrast\": {\n    \"ok\": true,\n    \"errorCount\": 0,\n    \"warningCount\": 0,\n    \"infoCount\": 0,\n    \"findings\": [],\n    \"enabled\": true,\n    \"samples\": [\n      1,\n      5,\n      9,\n      13,\n      17\n    ],\n    \"checked\": 26,\n    \"passed\": 26\n  },\n  \"hdr\": {\n    \"autoPromotion\": null,\n    \"inspection\": \"available\"\n  },\n  \"snapshots\": {\n    \"enabled\": false,\n    \"files\": [],\n    \"times\": [],\n    \"findingFiles\": []\n  },\n  \"_meta\": {\n    \"version\": \"0.8.46\",\n    \"latestVersion\": \"0.8.46\",\n    \"updateAvailable\": false\n  }\n}\n",
+    "stderr": "[INFO] [Compiler] Fetched 11 font face(s) for \"Inter\" from Google Fonts (cached to C:\\Users\\Jax 16\\.cache\\hyperframes\\fonts\\inter)\n[INFO] [Compiler] Injected deterministic @font-face rules for 1 requested font families\n[hyperframes] browserGpuMode probe â†’ hardware (WebGL renderer vendor=\"Google Inc. (AMD)\" renderer=\"ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001681) Direct3D11 vs_5_0 ps_5_0, D3D11)\")\n",
+    "snapshot": {
+      "status": "PASS",
+      "returncode": 0,
+      "stdout": "â—†  Capturing 5 frames at [1s, 5s, 9s, 13s, 17s] from hyperframes\n\n   Fonts: 3 loaded, 2 unused\n   Note: added an end-of-timeline frame at 17.46s. Short beats between your --at times may still be skipped â€” pass them explicitly.\n\nâ—‡  6 snapshots saved to snapshots/\n   snapshots\\frame-00-at-1s.png\n   snapshots\\frame-01-at-5s.png\n   snapshots\\frame-02-at-9s.png\n   snapshots\\frame-03-at-13s.png\n   snapshots\\frame-04-at-17s.png\n   snapshots\\frame-05-at-17.46s.png\n   contact-sheet.jpg (grid view for AI review)\n   --describe: GEMINI_API_KEY not set, skipping\n",
+      "stderr": "[INFO] [Compiler] Fetched 11 font face(s) for \"Inter\" from Google Fonts (cached to C:\\Users\\Jax 16\\.cache\\hyperframes\\fonts\\inter)\n[INFO] [Compiler] Injected deterministic @font-face rules for 1 requested font families\n[hyperframes] browserGpuMode probe â†’ hardware (WebGL renderer vendor=\"Google Inc. (AMD)\" renderer=\"ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001681) Direct3D11 vs_5_0 ps_5_0, D3D11)\")\n"
+    }
+  },
+  "evidence": {
+    "evidence_version": "creative.evidence@1.0.0",
+    "run_id": "run-20260918T075411Z-67caf6d4",
+    "source_sha256": "921b9366090745bf9861922b1cd1b9495c405db433c46c2b3b3f40e4be8b758f",
+    "plan_sha256": "a9ad6a420c266622f434fa0dc8e632076a42d85ca6e04ca16a0658970ada811d",
+    "pipeline_audit": "artifacts/audit.json",
+    "generated_artifacts": {
+      "website": "artifacts/website/index.html"
+    },
+    "hyperframes_check": "hyperframes-check.json",
+    "external_effects": "NOT_ATTEMPTED",
+    "qualification_boundary": "LOCAL_SOURCE_TO_PREVIEW"
+  },
+  "approved_at": "2026-09-18T07:55:19.177210+00:00"
+}
