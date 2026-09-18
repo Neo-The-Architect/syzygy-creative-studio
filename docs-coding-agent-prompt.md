@@ -156,14 +156,26 @@ Never silently retry with a different model. If a model fails, return a typed fa
 
 ## Desktop mini-application requirements
 
-Project the capability into the existing desktop experience without putting authority in the UI. The first surface should have four zones:
+Project the capability into the existing desktop experience without putting authority in
+the UI. The first surface is brief-first and autopilot-oriented: an operator describes
+the finished outcome, chooses output types and optional variations, and receives a
+finished-output gallery. The UI must orchestrate the existing owner-aligned lifecycle
+(`NEEDS_REVIEW → APPROVED → RENDERED → EXPORTED`) without exposing timeline editing as
+the primary task.
 
-- left explorer: runs, source packages, templates, artifacts;
-- center proof surface: preview, timeline, and evidence;
-- right inspector: source, claims, model route, rights, state, unresolved items;
-- bottom composer: source/intent entry and explicit `Create run` action.
+The visible surface must include:
 
-The UI must show real state and evidence references. It must not claim completion from a button click. Approval must be explicit, auditable, and routed back through the owner-aligned capability seam.
+- a natural-language brief and output recipe;
+- a progress projection for `PLAN → BUILD → RENDER → DELIVER`;
+- playable finished media plus links to generated artifacts;
+- local-only option selection;
+- a collapsed advanced proof surface for source, claims, provider route, rights, state,
+  and unresolved items.
+
+The UI must show real state and evidence references. It must not claim completion from a
+button click. Runtime approval may be sequenced by the local autopilot only for the
+deterministic route; OpenRouter transfer, spend, and publishing remain explicit,
+auditable actions routed through the owner-aligned capability seam.
 
 ## Work-unit sequence
 

@@ -147,14 +147,24 @@ The renderer receives only the admitted source package and plan. It does not dec
 
 ## Desktop mini-application UX
 
-The desktop surface should be a focused Studio Presence extension with four zones:
+The primary experience is an autonomous creative factory: the operator describes the
+finished outcome, chooses output types and (optionally) a number of directions, and
+Syzygy plans, composes, checks, renders, and packages the work without asking the
+operator to edit a timeline or inspect intermediate frames. The first response is a
+finished-output gallery with playable media and links to the generated website,
+presentation, app, content pack, and bundle.
 
-1. **Left explorer** — Creative runs, source packages, templates, and recent artifacts.
-2. **Center proof surface** — current HyperFrames preview, storyboard, timeline, or generated artifact; the agent visibly shows what it is doing.
-3. **Right inspector** — source facts, claim/evidence links, model/provider route, media rights, checks, and unresolved items.
-4. **Bottom composer** — natural-language creative intent with explicit output chips such as `video`, `website`, `presentation`, `app`, and `bundle`.
+The visible surface has four progressive-disclosure layers:
 
-The primary action is “Create a creative run.” Supporting actions are “Inspect evidence” and “Open preview.” Do not lead with provider shopping or a dashboard full of metrics.
+1. **Brief surface** — natural-language intent, output chips, and an option count.
+2. **Autopilot progress** — `PLAN → BUILD → RENDER → DELIVER`, mapped to real run state.
+3. **Finished gallery** — source-bound options with local selection and artifact links.
+4. **Advanced proof** — source facts, claim/evidence links, provider route, rights, checks,
+   and unresolved items, available when the operator needs them.
+
+The primary action is “Create finished options.” Evidence and approval remain runtime
+boundaries even when the UI orchestrates them sequentially. Provider transfer, spending,
+and publishing are never implied by a finished gallery or a local selection.
 
 ### Desktop states
 
