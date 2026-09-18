@@ -1,7 +1,7 @@
 schema: 1
 project: syzygy-creative-studio
 target: public-mvp
-current_round: assemble
+current_round: correctness
 intelligence_pack:
   status: complete
   evidence:
@@ -15,9 +15,14 @@ rounds:
       - packages/real-estate-pipeline/src/pipeline.py
       - packages/hyperframes-showcase/index.html
       - apps/creative-studio/tests/test_app.py
+      - apps/creative-studio/web/index.html
   integrate:
-    status: pending
-    evidence: []
+    status: complete
+    evidence:
+      - apps/creative-studio/app.py
+      - examples/rendered-run/render-receipt.json
+      - examples/rendered-run/run-summary.json
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/2
   correctness:
     status: pending
     evidence: []
@@ -72,10 +77,11 @@ issues:
   - id: ISSUE-0003
     fingerprint: sha256:hyperframes-render-export-not-wired
     severity: medium
-    status: open
+    status: resolved
     round_found: assemble
     activation_blocking: false
     evidence:
+      - examples/rendered-run/render-receipt.json
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/2
   - id: ISSUE-0004
     fingerprint: sha256:multi-output-adapters-not-implemented

@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -98,6 +99,77 @@ class CreativeStudioMvpTests(unittest.TestCase):
                 run_id="run-test-005",
                 run_checks=False,
             )
+
+    def test_render_requires_explicit_approval(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            app.RUNS_ROOT = Path(temp) / "runs"
+            os.environ["SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES"] = "1"
+            try:
+                app.create_run({"prompt": "Render gate"}, run_id="run-test-006")
+                with self.assertRaisesRegex(ValueError, "requires APPROVED"):
+                    app.render_run("run-test-006")
+            finally:
+                app.RUNS_ROOT = old_runs
+                os.environ.pop("SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES", None)
+
+    def test_render_binds_receipt_to_approved_inputs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            app.RUNS_ROOT = Path(temp) / "runs"
+            os.environ["SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES"] = "1"
+            try:
+                app.create_run({"prompt": "Render receipt"}, run_id="run-test-007")
+                app.approve_run("run-test-007")
+                run_dir = app.RUNS_ROOT / "run-test-007"
+                app.write_json(
+                    run_dir / "hyperframes-check.json",
+                    {"status": "PASS", "snapshot": {"status": "PASS"}},
+                )
+
+                def fake_render(project, output, quality):
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    output.write_bytes(b"synthetic-mp4")
+                    return {
+                        "command": ["fake-hyperframes", "render"],
+                        "quality": quality,
+                        "stdout": "fake render",
+                        "stderr": "",
+                        "ffprobe": {
+                            "format": {"duration": "18.0"},
+                            "streams": [{"codec_type": "video", "width": 1920, "height": 1080}],
+                        },
+                    }
+
+                with mock.patch.object(app, "render_hyperframes", side_effect=fake_render):
+                    result = app.render_run("run-test-007")
+                self.assertEqual(result["status"], "RENDERED")
+                receipt = app.read_json(run_dir / "render-receipt.json")
+                self.assertEqual(receipt["status"], "PASS")
+                self.assertEqual(receipt["size_bytes"], len(b"synthetic-mp4"))
+                self.assertTrue(receipt["sha256"])
+            finally:
+                app.RUNS_ROOT = old_runs
+                os.environ.pop("SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES", None)
+
+    def test_render_rejects_stale_approval(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            app.RUNS_ROOT = Path(temp) / "runs"
+            os.environ["SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES"] = "1"
+            try:
+                app.create_run({"prompt": "Stale approval"}, run_id="run-test-008")
+                app.approve_run("run-test-008")
+                source_path = app.RUNS_ROOT / "run-test-008" / "inputs" / "source.json"
+                source = app.read_json(source_path)
+                source["description"] = "changed after approval"
+                app.write_json(source_path, source)
+                with self.assertRaisesRegex(ValueError, "STALE_APPROVAL"):
+                    app.render_run("run-test-008")
+                self.assertEqual(app.read_json(app.RUNS_ROOT / "run-test-008" / "run.json")["status"], "BLOCKED")
+            finally:
+                app.RUNS_ROOT = old_runs
+                os.environ.pop("SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES", None)
 
 
 if __name__ == "__main__":

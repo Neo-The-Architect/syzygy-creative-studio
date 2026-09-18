@@ -20,10 +20,20 @@ prompt + approved property fixture
   -> editable HyperFrames project
   -> strict check and snapshots
   -> local review state
+  -> explicit approval
+  -> verified local MP4 render + receipt
 ```
 
 The MVP does not publish to social platforms, send messages, mutate a CRM,
 deploy services, or claim production readiness.
+
+Rendering is intentionally a separate state transition. After a run reaches
+`NEEDS_REVIEW`, the operator can approve the exact source and plan in the UI or
+through `POST /api/runs/{run_id}/approve`. Only an `APPROVED` run with matching
+source/plan hashes and passing HyperFrames check and snapshot evidence can call
+`POST /api/runs/{run_id}/render`. The render receipt records the output hash,
+size, quality, and `ffprobe` metadata; a changed source or plan fails closed as
+`STALE_APPROVAL`.
 
 ## Run the application
 

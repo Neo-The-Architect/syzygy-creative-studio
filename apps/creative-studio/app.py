@@ -174,6 +174,8 @@ def run_hyperframes_checks(project: Path, run_dir: Path) -> dict[str, Any]:
         cwd=project,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=180,
         check=False,
     )
@@ -190,6 +192,8 @@ def run_hyperframes_checks(project: Path, run_dir: Path) -> dict[str, Any]:
             cwd=project,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=180,
             check=False,
         )
@@ -202,6 +206,88 @@ def run_hyperframes_checks(project: Path, run_dir: Path) -> dict[str, Any]:
 
     write_json(run_dir / "hyperframes-check.json", result)
     return result
+
+
+def render_hyperframes(project: Path, output: Path, quality: str) -> dict[str, Any]:
+    """Render a checked HyperFrames project and return inspectable encoder evidence."""
+    if quality not in {"looks", "delivery"}:
+        raise ValueError("quality must be looks or delivery")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    npx = "npx.cmd" if os.name == "nt" else "npx"
+    command = [
+        npx,
+        "hyperframes@0.8.46",
+        "render",
+        str(project),
+        "--quality",
+        quality,
+        "--strict",
+        "--output",
+        str(output),
+    ]
+    render = subprocess.run(
+        command,
+        cwd=project,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=900,
+        check=False,
+    )
+    if render.returncode != 0:
+        raise subprocess.CalledProcessError(
+            render.returncode,
+            command,
+            output=render.stdout[-16000:],
+            stderr=render.stderr[-16000:],
+        )
+    if not output.is_file() or output.stat().st_size <= 0:
+        raise ValueError("render completed without a non-empty output file")
+
+    ffprobe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=120,
+        check=False,
+    )
+    if ffprobe.returncode != 0:
+        raise subprocess.CalledProcessError(
+            ffprobe.returncode,
+            ["ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(output)],
+            output=ffprobe.stdout[-12000:],
+            stderr=ffprobe.stderr[-12000:],
+        )
+    try:
+        metadata = json.loads(ffprobe.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise ValueError("ffprobe returned invalid JSON") from exc
+    streams = metadata.get("streams") or []
+    video_streams = [stream for stream in streams if stream.get("codec_type") == "video"]
+    if not video_streams:
+        raise ValueError("render output has no video stream")
+    duration = float((metadata.get("format") or {}).get("duration") or 0)
+    if duration <= 0:
+        raise ValueError("render output has no positive duration")
+    return {
+        "command": command,
+        "quality": quality,
+        "stdout": render.stdout[-16000:],
+        "stderr": render.stderr[-16000:],
+        "ffprobe": metadata,
+    }
 
 
 def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: bool = True) -> dict[str, Any]:
@@ -316,6 +402,89 @@ def approve_run(run_id: str) -> dict[str, Any]:
         raise ValueError(f"run is not awaiting review: {run.get('status')}")
     run["status"] = "APPROVED"
     run["approved_at"] = utc_now()
+    run["approval_binding"] = {
+        "source_sha256": digest_file(RUNS_ROOT / run_id / "inputs" / "source.json"),
+        "plan_sha256": digest_file(RUNS_ROOT / run_id / "plan.json"),
+    }
+    run["external_effects"] = "NOT_ATTEMPTED"
+    write_json(path, run)
+    return run
+
+
+def render_run(run_id: str, quality: str = "looks") -> dict[str, Any]:
+    """Render only the exact approved composition, after revalidating its evidence."""
+    run_dir = RUNS_ROOT / run_id
+    path = run_dir / "run.json"
+    if not path.exists():
+        raise FileNotFoundError(run_id)
+    run = read_json(path)
+    if run.get("status") != "APPROVED":
+        raise ValueError(f"render requires APPROVED run: {run.get('status')}")
+
+    source_path = run_dir / "inputs" / "source.json"
+    plan_path = run_dir / "plan.json"
+    current_source_hash = digest_file(source_path)
+    current_plan_hash = digest_file(plan_path)
+    evidence = run.get("evidence") or {}
+    binding = run.get("approval_binding") or {}
+    expected_source_hash = evidence.get("source_sha256")
+    expected_plan_hash = evidence.get("plan_sha256")
+    if (
+        current_source_hash != expected_source_hash
+        or current_plan_hash != expected_plan_hash
+        or current_source_hash != binding.get("source_sha256")
+        or current_plan_hash != binding.get("plan_sha256")
+    ):
+        run["status"] = "BLOCKED"
+        run["render_blocked_reason"] = "STALE_APPROVAL"
+        write_json(path, run)
+        raise ValueError("STALE_APPROVAL: source or plan changed after approval")
+
+    checks = read_json(run_dir / "hyperframes-check.json") if (run_dir / "hyperframes-check.json").exists() else run.get("checks", {})
+    if checks.get("status") != "PASS" or (checks.get("snapshot") or {}).get("status") != "PASS":
+        raise ValueError("render requires PASS HyperFrames check and snapshot evidence")
+
+    output = run_dir / "artifacts" / "hyperframes" / "reel.mp4"
+    receipt: dict[str, Any] = {
+        "receipt_version": "creative.render@1.0.0",
+        "run_id": run_id,
+        "status": "STARTED",
+        "quality": quality,
+        "source_sha256": current_source_hash,
+        "plan_sha256": current_plan_hash,
+        "external_effects": "NOT_ATTEMPTED",
+        "started_at": utc_now(),
+    }
+    try:
+        result = render_hyperframes(run_dir / "hyperframes", output, quality)
+        if not isinstance(result, dict):
+            raise ValueError("renderer returned no evidence object")
+        output_size = output.stat().st_size
+        output_sha256 = digest_file(output)
+        receipt.update(result)
+        receipt.update(
+            {
+                "status": "PASS",
+                "output": "artifacts/hyperframes/reel.mp4",
+                "size_bytes": output_size,
+                "sha256": output_sha256,
+                "completed_at": utc_now(),
+            }
+        )
+    except Exception as exc:
+        receipt.update({"status": "FAIL", "error": str(exc), "completed_at": utc_now()})
+        write_json(run_dir / "render-receipt.json", receipt)
+        raise
+
+    write_json(run_dir / "render-receipt.json", receipt)
+    run["status"] = "RENDERED"
+    run["render"] = {
+        "path": "artifacts/hyperframes/reel.mp4",
+        "receipt": "render-receipt.json",
+        "quality": quality,
+        "sha256": output_sha256,
+        "size_bytes": output_size,
+    }
     run["external_effects"] = "NOT_ATTEMPTED"
     write_json(path, run)
     return run
@@ -384,6 +553,11 @@ class StudioHandler(BaseHTTPRequestHandler):
             if request_path.startswith("/api/runs/") and request_path.endswith("/approve"):
                 run_id = request_path.removeprefix("/api/runs/").removesuffix("/approve").strip("/")
                 self.send_json(approve_run(run_id))
+                return
+            if request_path.startswith("/api/runs/") and request_path.endswith("/render"):
+                run_id = request_path.removeprefix("/api/runs/").removesuffix("/render").strip("/")
+                quality = str(payload.get("quality", "looks"))
+                self.send_json(render_run(run_id, quality=quality))
                 return
             self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
         except FileNotFoundError as exc:

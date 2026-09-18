@@ -1,0 +1,28 @@
+{
+  "receipt_version": "creative.render@1.0.0",
+  "run_id": "run-20260918T081243Z-268c053e",
+  "status": "PASS",
+  "quality": "looks",
+  "output": "artifacts/hyperframes/reel.mp4",
+  "size_bytes": 2325911,
+  "sha256": "e002f145822b93927567ed7d64dead521e3e51ebd035c9af33f48ce833ef6076",
+  "source_sha256": "55804fd7dcba082385cb8f15e635478ca696ab325e92bdad21e84b94d9d3e02b",
+  "plan_sha256": "86cb65350b2ba36ea5bf7cf37f41f25dac9bf7b4025b04079a9f33100ba790f3",
+  "ffprobe": {
+    "format": {
+      "duration": "18.000000",
+      "format_name": "mov,mp4,m4a,3gp,3g2,mj2"
+    },
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1920,
+        "height": 1080,
+        "avg_frame_rate": "30/1",
+        "duration": "18.000000"
+      }
+    ]
+  },
+  "external_effects": "NOT_ATTEMPTED"
+}
