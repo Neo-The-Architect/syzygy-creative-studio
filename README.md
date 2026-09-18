@@ -3,7 +3,7 @@
 Syzygy Creative Studio is an open-source, local-first creative automation studio.
 It turns an approved source package and a plain-language creative brief into
 inspectable artifacts such as cinematic video, websites, presentations, and
-future application prototypes.
+interactive local application prototypes.
 
 The project is designed to run on local hardware or operator-controlled remote
 infrastructure. It uses OpenRouter as an optional reasoning/model-routing plane

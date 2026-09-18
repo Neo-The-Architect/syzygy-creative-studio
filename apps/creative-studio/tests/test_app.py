@@ -59,6 +59,10 @@ class CreativeStudioMvpTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             app.create_run({"prompt": ""}, run_id="run-test-003", run_checks=False)
 
+    def test_unsupported_output_target_fails_closed(self):
+        with self.assertRaisesRegex(ValueError, "unsupported output target"):
+            app.create_run({"prompt": "Reject unknown adapter", "output_targets": ["teleporter"]}, run_id="run-test-003b", run_checks=False)
+
     def test_custom_source_is_bound_into_plan_and_composition(self):
         with tempfile.TemporaryDirectory() as temp:
             old_runs = app.RUNS_ROOT
@@ -68,6 +72,7 @@ class CreativeStudioMvpTests(unittest.TestCase):
                 result = app.create_run(
                     {
                         "prompt": "Create a modern listing film.",
+                        "output_targets": ["video", "website", "presentation", "app"],
                         "source": {
                             "source_url": "local://approved-custom",
                             "address": "42 Signal Street, Testville",
@@ -88,6 +93,18 @@ class CreativeStudioMvpTests(unittest.TestCase):
                 composition = (app.RUNS_ROOT / "run-test-004" / "hyperframes" / "index.html").read_text(encoding="utf-8")
                 self.assertIn("42 Signal Street", composition)
                 self.assertIn("$710,000", composition)
+                presentation = (app.RUNS_ROOT / "run-test-004" / "artifacts" / "presentation" / "index.html").read_text(encoding="utf-8")
+                self.assertIn("42 Signal Street", presentation)
+                prototype = (app.RUNS_ROOT / "run-test-004" / "artifacts" / "app" / "index.html").read_text(encoding="utf-8")
+                self.assertIn("42 Signal Street", prototype)
+                self.assertEqual(
+                    result["artifacts"],
+                    {
+                        "website": "artifacts/website/index.html",
+                        "presentation": "artifacts/presentation/index.html",
+                        "app": "artifacts/app/index.html",
+                    },
+                )
             finally:
                 app.RUNS_ROOT = old_runs
                 os.environ.pop("SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES", None)

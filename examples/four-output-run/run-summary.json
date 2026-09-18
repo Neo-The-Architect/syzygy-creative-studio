@@ -1,0 +1,16 @@
+{
+  "run_id": "run-20260918T083814Z-4ef29c35",
+  "status": "RENDERED",
+  "output_targets": ["video", "website", "presentation", "app"],
+  "artifacts": {
+    "website": {"http_status": 200, "contains_source_address": true},
+    "presentation": {"http_status": 200, "contains_source_address": true},
+    "app": {"http_status": 200, "contains_source_address": true}
+  },
+  "checks": {
+    "hyperframes": "PASS",
+    "snapshot": "PASS"
+  },
+  "boundary": "LOCAL_SOURCE_TO_FOUR_OUTPUT_RENDERED_ARTIFACT",
+  "external_effects": "NOT_ATTEMPTED"
+}

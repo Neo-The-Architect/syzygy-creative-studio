@@ -88,10 +88,12 @@ issues:
   - id: ISSUE-0004
     fingerprint: sha256:multi-output-adapters-not-implemented
     severity: medium
-    status: open
+    status: resolved
     round_found: assemble
     activation_blocking: false
     evidence:
+      - examples/four-output-run/run-summary.json
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/3
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/3
   - id: ISSUE-0005
     fingerprint: sha256:syzygy-integration-deferred

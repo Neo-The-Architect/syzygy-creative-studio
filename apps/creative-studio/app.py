@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from html import escape
 import json
 import mimetypes
 import os
@@ -117,15 +118,58 @@ def build_creative_plan(prompt: str, source: dict[str, Any], output_targets: lis
 
 def render_website(source: dict[str, Any], prompt: str, destination: Path) -> dict[str, str]:
     destination.mkdir(parents=True, exist_ok=True)
-    features = "".join(f"<li>{str(feature)}</li>" for feature in source.get("features", []))
-    address = str(source.get("address", "Approved source"))
+    features = "".join(f"<li>{escape(str(feature))}</li>" for feature in source.get("features", []))
+    address = escape(str(source.get("address", "Approved source")))
+    safe_prompt = escape(prompt)
     html = f"""<!doctype html>
 <html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{address} | Creative Studio</title>
 <style>body{{margin:0;background:#08131f;color:#eef7fb;font:16px/1.5 system-ui,sans-serif}}main{{max-width:980px;margin:auto;padding:72px 28px}}.eyebrow{{color:#e8b968;text-transform:uppercase;letter-spacing:.16em;font-size:11px}}h1{{font-size:clamp(42px,8vw,86px);line-height:.98;max-width:760px}}.facts{{display:flex;gap:18px;flex-wrap:wrap;color:#9ec3d0}}.facts strong{{color:#fff}}.card{{margin-top:48px;padding:24px;border:1px solid #24455b;border-radius:18px;background:#102638}}li{{margin:8px 0}}small{{color:#89a9bb}}</style></head>
-<body><main><div class=\"eyebrow\">Syzygy Creative Studio · local artifact</div><h1>{address}</h1><p>{prompt}</p><div class=\"facts\"><span><strong>{source.get('price','Price on request')}</strong></span><span><strong>{source.get('beds','?')}</strong> beds</span><span><strong>{source.get('baths','?')}</strong> baths</span><span><strong>{source.get('area_sqft','?')}</strong> sq ft</span></div><section class=\"card\"><div class=\"eyebrow\">Supported features</div><ul>{features}</ul><small>Generated from an approved local source package. Verify before publishing.</small></section></main></body></html>"""
+<body><main><div class=\"eyebrow\">Syzygy Creative Studio · local artifact</div><h1>{address}</h1><p>{safe_prompt}</p><div class=\"facts\"><span><strong>{escape(str(source.get('price','Price on request')))}</strong></span><span><strong>{escape(str(source.get('beds','?')))}</strong> beds</span><span><strong>{escape(str(source.get('baths','?')))}</strong> baths</span><span><strong>{escape(str(source.get('area_sqft','?')))}</strong> sq ft</span></div><section class=\"card\"><div class=\"eyebrow\">Supported features</div><ul>{features}</ul><small>Generated from an approved local source package. Verify before publishing.</small></section></main></body></html>"""
     path = destination / "index.html"
     path.write_text(html, encoding="utf-8")
     return {"website": "artifacts/website/index.html"}
+
+
+def render_presentation(source: dict[str, Any], prompt: str, destination: Path) -> dict[str, str]:
+    """Create a source-bound, portable slide-deck artifact without a hosted dependency."""
+    destination.mkdir(parents=True, exist_ok=True)
+    address = escape(str(source.get("address", "Approved source")))
+    price = escape(str(source.get("price", "Price on request")))
+    beds = escape(str(source.get("beds", "?")))
+    baths = escape(str(source.get("baths", "?")))
+    area = escape(str(source.get("area_sqft", "?")))
+    safe_prompt = escape(prompt)
+    feature_items = "".join(f"<li>{escape(str(feature))}</li>" for feature in source.get("features", []))
+    html = f"""<!doctype html>
+<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{address} | Presentation</title>
+<style>body{{margin:0;background:#07131f;color:#f4f8fb;font:18px/1.45 system-ui,sans-serif}}.deck{{display:grid;gap:22px;padding:30px;max-width:1100px;margin:auto}}.slide{{min-height:520px;padding:54px;border:1px solid #2b5268;border-radius:24px;background:linear-gradient(135deg,#173b54,#0b1b29);display:flex;flex-direction:column;justify-content:center}}.kicker{{color:#e8b968;text-transform:uppercase;letter-spacing:.18em;font-size:12px}}h1{{font-size:clamp(46px,8vw,96px);line-height:.95;margin:18px 0}}h2{{font-size:42px;margin:8px 0 24px}}.facts{{display:flex;gap:22px;flex-wrap:wrap;color:#b7d3df}}.facts b{{color:white}}li{{margin:12px 0}}</style></head>
+<body><main class=\"deck\"><section class=\"slide\"><div class=\"kicker\">Syzygy Creative Studio · slide 01</div><h1>{address}</h1><p>{safe_prompt}</p></section><section class=\"slide\"><div class=\"kicker\">The proposition</div><h2>Room to live well.</h2><div class=\"facts\"><span><b>{price}</b></span><span><b>{beds}</b> beds</span><span><b>{baths}</b> baths</span><span><b>{area}</b> sq ft</span></div></section><section class=\"slide\"><div class=\"kicker\">Supported details</div><h2>What the source confirms</h2><ul>{feature_items}</ul></section><section class=\"slide\"><div class=\"kicker\">Review handoff</div><h2>Verify, then publish.</h2><p>This deck was generated from an approved local source package. Confirm facts, rights, and final copy before external use.</p></section></main></body></html>"""
+    (destination / "index.html").write_text(html, encoding="utf-8")
+    return {"presentation": "artifacts/presentation/index.html"}
+
+
+def render_app_prototype(source: dict[str, Any], prompt: str, destination: Path) -> dict[str, str]:
+    """Create a self-contained interactive listing-app prototype for local review."""
+    destination.mkdir(parents=True, exist_ok=True)
+    address = escape(str(source.get("address", "Approved source")))
+    price = escape(str(source.get("price", "Price on request")))
+    facts_json = json.dumps(
+        {
+            "address": str(source.get("address", "Approved source")),
+            "price": str(source.get("price", "Price on request")),
+            "beds": source.get("beds", "?"),
+            "baths": source.get("baths", "?"),
+            "area_sqft": source.get("area_sqft", "?"),
+            "features": source.get("features", []),
+        },
+        ensure_ascii=False,
+    ).replace("</", "<\\/")
+    html = f"""<!doctype html>
+<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{address} | App Prototype</title>
+<style>body{{margin:0;background:#f3f7f8;color:#112533;font:16px/1.5 system-ui,sans-serif}}header{{padding:22px 28px;background:#102638;color:white;display:flex;justify-content:space-between;gap:16px;align-items:center}}main{{max-width:960px;margin:auto;padding:36px 22px}}.hero{{padding:34px;border-radius:22px;background:linear-gradient(135deg,#1b5262,#102638);color:white}}h1{{font-size:clamp(36px,7vw,72px);line-height:1;margin:0 0 16px}}.facts{{display:flex;gap:16px;flex-wrap:wrap}}.facts span{{padding:10px 14px;border-radius:999px;background:#ffffff1c}}.card{{margin-top:22px;background:white;border:1px solid #d3e1e5;border-radius:18px;padding:24px}}button{{border:0;border-radius:10px;padding:12px 16px;background:#e8b968;color:#20160d;font-weight:700;cursor:pointer}}#details{{display:none}}small{{color:#5d7580}}</style></head>
+<body><header><strong>Creative Studio app prototype</strong><span>local artifact</span></header><main><section class=\"hero\"><h1>{address}</h1><p>Explore the source-bound listing experience.</p><div class=\"facts\"><span>{price}</span><span id=\"beds\"></span><span id=\"baths\"></span><span id=\"area\"></span></div></section><section class=\"card\"><button id=\"toggle\">Show supported details</button><div id=\"details\"><ul id=\"features\"></ul><small>Generated from an approved local source package. Verify before publishing.</small></div></section></main><script>const source={facts_json};document.getElementById('beds').textContent=source.beds+' beds';document.getElementById('baths').textContent=source.baths+' baths';document.getElementById('area').textContent=source.area_sqft+' sq ft';document.getElementById('features').innerHTML=source.features.map(item=>'<li>'+String(item).replace(/[&<>\"']/g,char=>({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}}[char]))+'</li>').join('');document.getElementById('toggle').onclick=()=>{{const details=document.getElementById('details');details.style.display=details.style.display==='block'?'none':'block';}};</script></body></html>"""
+    (destination / "index.html").write_text(html, encoding="utf-8")
+    return {"app": "artifacts/app/index.html"}
 
 
 def import_pipeline() -> Any:
@@ -154,13 +198,13 @@ def copy_hyperframes_project(destination: Path, run: dict[str, Any], source: dic
     )
     index = destination / "index.html"
     composition = index.read_text(encoding="utf-8")
-    address = str(source.get("address", "Approved source"))
+    address = escape(str(source.get("address", "Approved source")))
     address_parts = address.split(",", 1)
     address_html = address_parts[0] + ("<br />" + address_parts[1].strip() if len(address_parts) == 2 else "")
-    specs = f"{source.get('beds', '?')} beds · {source.get('baths', '?')} baths<br />{source.get('area_sqft', '?')} sq ft"
+    specs = f"{escape(str(source.get('beds', '?')))} beds · {escape(str(source.get('baths', '?')))} baths<br />{escape(str(source.get('area_sqft', '?')))} sq ft"
     composition = composition.replace("100 Example<br />Avenue", address_html)
     composition = composition.replace("Testville<br />3 beds · 2.5 baths<br />2,100 sq ft", specs)
-    composition = composition.replace("$625,000", str(source.get("price", "Price on request")))
+    composition = composition.replace("$625,000", escape(str(source.get("price", "Price on request"))))
     index.write_text(composition, encoding="utf-8")
 
 
@@ -302,6 +346,10 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
     output_targets = payload.get("output_targets") or ["video"]
     if not isinstance(output_targets, list) or not output_targets:
         raise ValueError("output_targets must be a non-empty list")
+    allowed_targets = {"video", "website", "presentation", "app"}
+    unsupported_targets = sorted(set(output_targets) - allowed_targets)
+    if unsupported_targets:
+        raise ValueError(f"unsupported output target(s): {', '.join(unsupported_targets)}")
 
     run_id = run_id or f"run-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
     run_dir = RUNS_ROOT / run_id
@@ -349,6 +397,10 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
     generated_artifacts: dict[str, str] = {}
     if "website" in output_targets:
         generated_artifacts.update(render_website(source, prompt, artifacts_dir / "website"))
+    if "presentation" in output_targets:
+        generated_artifacts.update(render_presentation(source, prompt, artifacts_dir / "presentation"))
+    if "app" in output_targets:
+        generated_artifacts.update(render_app_prototype(source, prompt, artifacts_dir / "app"))
     run_record["artifacts"] = generated_artifacts
 
     hyperframes_dir = run_dir / "hyperframes"
