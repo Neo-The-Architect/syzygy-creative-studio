@@ -94,6 +94,23 @@ def require_safe_run_id(run_id: str) -> str:
     return run_id
 
 
+def resolve_artifact_path(run_id: str, relative: str) -> Path | None:
+    """Resolve an artifact only inside the run's artifacts subtree."""
+    if not is_safe_run_id(run_id):
+        return None
+    root = (RUNS_ROOT / run_id).resolve()
+    artifacts_root = (root / "artifacts").resolve()
+    candidate = (root / unquote(relative)).resolve()
+    if (
+        not root.exists()
+        or not artifacts_root.exists()
+        or artifacts_root not in candidate.parents
+        or not candidate.is_file()
+    ):
+        return None
+    return candidate
+
+
 def is_loopback_host(host: str) -> bool:
     if host.lower() == "localhost":
         return True
@@ -745,12 +762,8 @@ class StudioHandler(BaseHTTPRequestHandler):
         if request_path.startswith("/api/runs/") and "/artifacts/" in request_path:
             prefix, relative = request_path.split("/artifacts/", 1)
             run_id = unquote(prefix.removeprefix("/api/runs/"))
-            if not is_safe_run_id(run_id):
-                self.send_json({"error": "artifact not found"}, HTTPStatus.NOT_FOUND, head_only=True)
-                return
-            root = (RUNS_ROOT / run_id).resolve()
-            candidate = (root / unquote(relative)).resolve()
-            if not root.exists() or root not in candidate.parents or not candidate.is_file():
+            candidate = resolve_artifact_path(run_id, relative)
+            if candidate is None:
                 self.send_json({"error": "artifact not found"}, HTTPStatus.NOT_FOUND, head_only=True)
                 return
             self.send_response(HTTPStatus.OK)
@@ -794,12 +807,8 @@ class StudioHandler(BaseHTTPRequestHandler):
         if request_path.startswith("/api/runs/") and "/artifacts/" in request_path:
             prefix, relative = request_path.split("/artifacts/", 1)
             run_id = unquote(prefix.removeprefix("/api/runs/"))
-            if not is_safe_run_id(run_id):
-                self.send_json({"error": "artifact not found"}, HTTPStatus.NOT_FOUND)
-                return
-            root = (RUNS_ROOT / run_id).resolve()
-            candidate = (root / unquote(relative)).resolve()
-            if not root.exists() or root not in candidate.parents or not candidate.is_file():
+            candidate = resolve_artifact_path(run_id, relative)
+            if candidate is None:
                 self.send_json({"error": "artifact not found"}, HTTPStatus.NOT_FOUND)
                 return
             body = candidate.read_bytes()

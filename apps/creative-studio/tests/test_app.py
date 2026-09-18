@@ -77,6 +77,13 @@ class CreativeStudioMvpTests(unittest.TestCase):
                         timeout=5,
                     )
                 self.assertEqual(traversal.exception.code, 404)
+
+                with self.assertRaises(urllib.error.HTTPError) as internal_path_confusion:
+                    urllib.request.urlopen(
+                        urllib.request.Request(base + "/api/runs/head-test/artifacts/%2e%2e/run.json", method="HEAD"),
+                        timeout=5,
+                    )
+                self.assertEqual(internal_path_confusion.exception.code, 404)
             finally:
                 server.shutdown()
                 server.server_close()
