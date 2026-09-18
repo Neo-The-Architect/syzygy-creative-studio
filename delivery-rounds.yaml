@@ -146,6 +146,16 @@ issues:
       - .github/workflows/verify.yml
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/actions/runs/35333859622
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/7
+  - id: ISSUE-0009
+    fingerprint: sha256:independent-security-scan-unavailable
+    severity: medium
+    status: open
+    round_found: security
+    activation_blocking: false
+    evidence:
+      - apps/creative-studio/app.py
+      - apps/creative-studio/tests/test_app.py
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/8
 release:
   requested: false
   exact_commit: ""
