@@ -66,6 +66,17 @@ From the repository root:
 python apps/creative-studio/app.py
 ```
 
+Or use the loopback-only launcher from any PowerShell working directory:
+
+```powershell
+.\scripts\start_local.ps1
+```
+
+The launcher reuses an already healthy local service, keeps the worker in the
+current terminal for inspectable logs, and never binds beyond `127.0.0.1`.
+Add `-Open` to open the local UI automatically, or `-CheckOnly` to qualify
+whether the service is already healthy without starting another process.
+
 Open `http://127.0.0.1:8765`.
 
 Run one complete deterministic fixture:
