@@ -16,28 +16,34 @@ import app  # noqa: E402
 
 
 class CreativeStudioMvpTests(unittest.TestCase):
-    def test_openrouter_preflight_fails_before_partial_run_creation(self):
+    def test_openrouter_candidate_is_local_until_provider_approval(self):
         with tempfile.TemporaryDirectory() as temp:
             old_runs = app.RUNS_ROOT
-            old_key = os.environ.pop("OPENROUTER_API_KEY", None)
-            old_model = os.environ.pop("OPENROUTER_MODEL", None)
             app.RUNS_ROOT = Path(temp) / "runs"
+            pipeline = app.import_pipeline()
+            deterministic_result = {
+                "audit": {"status": "PASS", "provider": "deterministic"},
+                "campaign": {"claims": [], "copy": {"provider": "deterministic"}},
+            }
             try:
-                with self.assertRaisesRegex(ValueError, "OPENROUTER_API_KEY.*OPENROUTER_MODEL"):
-                    app.create_run(
-                        {"prompt": "Provider preflight", "provider": "openrouter"},
-                        run_id="run-openrouter-preflight",
-                        run_checks=False,
-                    )
-                self.assertFalse((app.RUNS_ROOT / "run-openrouter-preflight").exists())
+                with mock.patch.object(pipeline, "run_pipeline", return_value=deterministic_result) as run_pipeline:
+                    with mock.patch.object(pipeline, "openrouter_creative_plan") as provider_plan:
+                        result = app.create_run(
+                            {"prompt": "Provider approval", "provider": "openrouter"},
+                            run_id="run-openrouter-pending",
+                            run_checks=False,
+                        )
+                self.assertEqual(result["status"], "NEEDS_REVIEW")
+                self.assertEqual(result["provider_request"]["state"], "PENDING_APPROVAL")
+                self.assertEqual(result["provider_transfer"], "PENDING_APPROVAL")
+                self.assertEqual(result["plan"]["provider"], "deterministic")
+                run_pipeline.assert_called_once()
+                self.assertEqual(run_pipeline.call_args.kwargs["provider"], "deterministic")
+                provider_plan.assert_not_called()
             finally:
                 app.RUNS_ROOT = old_runs
-                if old_key is not None:
-                    os.environ["OPENROUTER_API_KEY"] = old_key
-                if old_model is not None:
-                    os.environ["OPENROUTER_MODEL"] = old_model
 
-    def test_openrouter_provider_binds_plan_into_run_record(self):
+    def test_openrouter_provider_transfer_requires_explicit_approval(self):
         with tempfile.TemporaryDirectory() as temp:
             old_runs = app.RUNS_ROOT
             app.RUNS_ROOT = Path(temp) / "runs"
@@ -66,16 +72,27 @@ class CreativeStudioMvpTests(unittest.TestCase):
             os.environ["OPENROUTER_API_KEY"] = "test-key"
             os.environ["OPENROUTER_MODEL"] = "test/model"
             try:
-                with mock.patch.object(pipeline, "openrouter_creative_plan", return_value=generated_plan):
-                    with mock.patch.object(pipeline, "run_pipeline", return_value=fake_pipeline_result):
-                        result = app.create_run(
-                            {"prompt": "Use the live planning route", "provider": "openrouter"},
-                            run_id="run-openrouter-plan",
-                            run_checks=False,
-                        )
+                with mock.patch.object(pipeline, "run_pipeline", return_value=fake_pipeline_result):
+                    pending = app.create_run(
+                        {"prompt": "Use the live planning route", "provider": "openrouter"},
+                        run_id="run-openrouter-plan",
+                        run_checks=False,
+                    )
+                with self.assertRaisesRegex(ValueError, "provider approval is required"):
+                    app.approve_run("run-openrouter-plan")
+
+                with mock.patch.object(pipeline, "openrouter_creative_plan", return_value=generated_plan) as provider_plan:
+                    with mock.patch.object(pipeline, "run_pipeline", return_value=fake_pipeline_result) as provider_pipeline:
+                        result = app.approve_provider_run("run-openrouter-plan", confirm=True)
                 self.assertEqual(result["plan"]["provider"], "openrouter")
                 self.assertEqual(result["plan"]["creative_direction"], generated_plan["creative_direction"])
                 self.assertEqual(result["plan"]["provider_metadata"]["request_id"], "plan_123")
+                self.assertEqual(result["provider_request"]["state"], "TRANSFERRED")
+                self.assertEqual(result["provider_transfer"], "TRANSFERRED")
+                provider_plan.assert_called_once()
+                self.assertEqual(provider_pipeline.call_args.kwargs["provider"], "openrouter")
+                approved = app.approve_run("run-openrouter-plan")
+                self.assertEqual(approved["status"], "APPROVED")
             finally:
                 app.RUNS_ROOT = old_runs
                 if old_key is None:
@@ -182,6 +199,65 @@ class CreativeStudioMvpTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)
+
+    def test_provider_approval_http_action_is_explicit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            old_key = os.environ.get("OPENROUTER_API_KEY")
+            old_model = os.environ.get("OPENROUTER_MODEL")
+            app.RUNS_ROOT = Path(temp) / "runs"
+            os.environ["OPENROUTER_API_KEY"] = "test-key"
+            os.environ["OPENROUTER_MODEL"] = "test/model"
+            pipeline = app.import_pipeline()
+            source = app.fixture_property()
+            claims = pipeline.build_claims(source)
+            generated_plan = {
+                "creative_direction": "Approval-bound route",
+                "beats": [{"id": "arrival", "purpose": "source", "duration_seconds": 8, "claim_ids": [claim["claim_id"] for claim in claims]}],
+                "claim_ids": [claim["claim_id"] for claim in claims],
+                "provider_metadata": {"provider": "openrouter", "model": "test/model", "request_id": "http_123"},
+            }
+            pipeline_result = {"audit": {"status": "PASS", "provider": "openrouter:test/model"}, "campaign": {"claims": claims, "copy": {}}}
+            server = None
+            try:
+                with mock.patch.object(pipeline, "run_pipeline", return_value={"audit": {"status": "PASS", "provider": "deterministic"}, "campaign": {"claims": claims, "copy": {}}}):
+                    app.create_run({"prompt": "HTTP provider approval", "provider": "openrouter"}, run_id="run-provider-http", run_checks=False)
+                server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.StudioHandler)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_address[1]}"
+                def post(value):
+                    request = urllib.request.Request(
+                        base + "/api/runs/run-provider-http/provider-approve",
+                        data=json.dumps(value).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    return urllib.request.urlopen(request, timeout=5)
+
+                with self.assertRaises(urllib.error.HTTPError) as missing_confirmation:
+                    post({"confirm": False})
+                self.assertEqual(missing_confirmation.exception.code, 400)
+                with mock.patch.object(pipeline, "openrouter_creative_plan", return_value=generated_plan):
+                    with mock.patch.object(pipeline, "run_pipeline", return_value=pipeline_result):
+                        with post({"confirm": True}) as response:
+                            self.assertEqual(response.status, 200)
+                            body = json.loads(response.read())
+                self.assertEqual(body["provider_request"]["state"], "TRANSFERRED")
+            finally:
+                if server is not None:
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=5)
+                app.RUNS_ROOT = old_runs
+                if old_key is None:
+                    os.environ.pop("OPENROUTER_API_KEY", None)
+                else:
+                    os.environ["OPENROUTER_API_KEY"] = old_key
+                if old_model is None:
+                    os.environ.pop("OPENROUTER_MODEL", None)
+                else:
+                    os.environ["OPENROUTER_MODEL"] = old_model
 
     def test_create_run_reaches_review_without_external_effects(self):
         with tempfile.TemporaryDirectory() as temp:

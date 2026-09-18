@@ -141,7 +141,16 @@ Use explicit IDs, explicit `data-track-index`, deterministic timing, local media
 
 ## OpenRouter implementation rules
 
-Use OpenRouter only as the model-routing plane, not as authority. Prefer strict structured JSON output with a schema for source claims, storyboard beats, asset requests, and copy variants. Record provider, model, request id, schema version, latency, token usage when available, and failure classification. Redact secrets and private source data from logs. If the API key or model is absent, use a deterministic fixture route only when explicitly configured and label the run `DETERMINISTIC_FIXTURE`.
+Use OpenRouter only as the model-routing plane, not as authority. Creating a
+provider-selected candidate must remain local and deterministic; do not read
+provider credentials or send source data until a separate explicit,
+approval-bound provider action is confirmed. Prefer strict structured JSON
+output with a schema for source claims, storyboard beats, asset requests, and
+copy variants. Record provider, model, request id, schema version, latency,
+token usage when available, and failure classification. Redact secrets and
+private source data from logs. If the provider action is not approved or the
+API key/model is absent, keep the candidate in `NEEDS_REVIEW` and fail closed;
+never silently switch models or providers.
 
 Never silently retry with a different model. If a model fails, return a typed failure and preserve the source package and prior evidence.
 

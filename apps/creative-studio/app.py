@@ -461,7 +461,6 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
     provider = str(payload.get("provider", "deterministic"))
     if provider not in {"deterministic", "openrouter"}:
         raise ValueError("provider must be deterministic or openrouter")
-    validate_provider_configuration(provider)
 
     output_targets = payload.get("output_targets") or ["video"]
     if not isinstance(output_targets, list) or not output_targets:
@@ -513,13 +512,17 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
     shutil.copytree(FIXTURE_IMAGES, images_dir)
 
     claims = pipeline.build_claims(source)
-    creative_plan = build_creative_plan(prompt, source, output_targets, provider, pipeline, claims)
+    # OpenRouter is intentionally deferred until the explicit provider-approval
+    # action. Candidate creation remains local and deterministic, so selecting a
+    # provider cannot itself transfer source data or spend provider quota.
+    execution_provider = "deterministic" if provider == "openrouter" else provider
+    creative_plan = build_creative_plan(prompt, source, output_targets, execution_provider, pipeline, claims)
     artifacts_dir = run_dir / "artifacts"
     pipeline_result = pipeline.run_pipeline(
         str(run_dir / "inputs" / "source.json"),
         str(images_dir),
         str(artifacts_dir),
-        provider=provider,
+        provider=execution_provider,
     )
 
     run_record: dict[str, Any] = {
@@ -532,6 +535,12 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
         },
         "plan": creative_plan,
         "pipeline": pipeline_result["audit"],
+        "provider_request": {
+            "provider": provider,
+            "state": "PENDING_APPROVAL" if provider == "openrouter" else "NOT_APPLICABLE",
+            "requires_explicit_approval": provider == "openrouter",
+        },
+        "provider_transfer": "PENDING_APPROVAL" if provider == "openrouter" else "NOT_REQUESTED",
         "external_effects": "NOT_ATTEMPTED",
         "created_at": request["created_at"],
     }
@@ -569,6 +578,7 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
         "pipeline_audit": "artifacts/audit.json",
         "generated_artifacts": generated_artifacts,
         "hyperframes_check": "hyperframes-check.json",
+        "provider_transfer": "PENDING_APPROVAL" if provider == "openrouter" else "NOT_REQUESTED",
         "external_effects": "NOT_ATTEMPTED",
         "qualification_boundary": "LOCAL_SOURCE_TO_PREVIEW",
     }
@@ -576,6 +586,76 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
     run_record["evidence"] = evidence
     write_json(run_dir / "run.json", run_record)
     return run_record
+
+
+def approve_provider_run(run_id: str, confirm: bool = False) -> dict[str, Any]:
+    """Perform the explicit, approval-bound OpenRouter transfer for a local candidate."""
+    if not confirm:
+        raise ValueError("provider approval requires confirm=true")
+    path = RUNS_ROOT / run_id / "run.json"
+    if not path.exists():
+        raise FileNotFoundError(run_id)
+    run = read_json(path)
+    request = run.get("request") or {}
+    provider_request = run.get("provider_request") or {}
+    if run.get("status") != "NEEDS_REVIEW":
+        raise ValueError(f"provider approval requires NEEDS_REVIEW run: {run.get('status')}")
+    if request.get("provider") != "openrouter" or provider_request.get("state") != "PENDING_APPROVAL":
+        raise ValueError("run has no pending OpenRouter provider approval")
+
+    validate_provider_configuration("openrouter")
+    pipeline = import_pipeline()
+    source = read_json(RUNS_ROOT / run_id / "inputs" / "source.json")
+    claims = pipeline.build_claims(source)
+    output_targets = request.get("output_targets") or ["video"]
+    try:
+        plan = build_creative_plan(
+            str(request.get("prompt", "")),
+            source,
+            output_targets,
+            "openrouter",
+            pipeline,
+            claims,
+        )
+        pipeline_result = pipeline.run_pipeline(
+            str(RUNS_ROOT / run_id / "inputs" / "source.json"),
+            str(RUNS_ROOT / run_id / "inputs" / "images"),
+            str(RUNS_ROOT / run_id / "artifacts"),
+            provider="openrouter",
+        )
+    except Exception as exc:
+        provider_request.update({"state": "FAILED", "error": str(exc), "failed_at": utc_now()})
+        run["provider_request"] = provider_request
+        run["provider_transfer"] = "FAILED"
+        write_json(path, run)
+        raise
+
+    plan_path = RUNS_ROOT / run_id / "plan.json"
+    write_json(plan_path, plan)
+    run["plan"] = plan
+    run["pipeline"] = pipeline_result["audit"]
+    if "content" in output_targets:
+        content_artifacts = render_content_pack(
+            source,
+            str(request.get("prompt", "")),
+            pipeline_result,
+            RUNS_ROOT / run_id / "artifacts" / "content",
+        )
+        run.setdefault("artifacts", {}).update(content_artifacts)
+    provider_request.update(
+        {
+            "state": "TRANSFERRED",
+            "approved_at": utc_now(),
+            "provider_metadata": plan.get("provider_metadata", {}),
+        }
+    )
+    run["provider_request"] = provider_request
+    run["provider_transfer"] = "TRANSFERRED"
+    run.setdefault("evidence", {})["plan_sha256"] = digest_file(plan_path)
+    run["evidence"]["provider_transfer"] = "TRANSFERRED"
+    write_json(RUNS_ROOT / run_id / "evidence.json", run["evidence"])
+    write_json(path, run)
+    return run
 
 
 def list_runs() -> list[dict[str, Any]]:
@@ -597,6 +677,9 @@ def approve_run(run_id: str) -> dict[str, Any]:
     run = read_json(path)
     if run.get("status") != "NEEDS_REVIEW":
         raise ValueError(f"run is not awaiting review: {run.get('status')}")
+    if (run.get("request") or {}).get("provider") == "openrouter":
+        if (run.get("provider_request") or {}).get("state") != "TRANSFERRED":
+            raise ValueError("provider approval is required before render approval")
     run["status"] = "APPROVED"
     run["approved_at"] = utc_now()
     run["approval_binding"] = {
@@ -895,6 +978,11 @@ class StudioHandler(BaseHTTPRequestHandler):
             request_path = urlsplit(self.path).path
             if request_path == "/api/runs":
                 self.send_json(create_run(payload), HTTPStatus.CREATED)
+                return
+            if request_path.startswith("/api/runs/") and request_path.endswith("/provider-approve"):
+                run_id = unquote(request_path.removeprefix("/api/runs/").removesuffix("/provider-approve").strip("/"))
+                require_safe_run_id(run_id)
+                self.send_json(approve_provider_run(run_id, confirm=payload.get("confirm") is True))
                 return
             if request_path.startswith("/api/runs/") and request_path.endswith("/approve"):
                 run_id = unquote(request_path.removeprefix("/api/runs/").removesuffix("/approve").strip("/"))

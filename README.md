@@ -153,19 +153,31 @@ Provider-specific image/video/audio adapters are intentionally separate from
 the core run state. A generated artifact is not automatically an approved or
 published artifact.
 
-The local UI exposes both provider routes. `deterministic fixture` is the
-offline default. Selecting `OpenRouter` requires `OPENROUTER_API_KEY` and
-`OPENROUTER_MODEL` to be configured in the process environment; missing
-configuration or malformed model output fails the run with a typed error and
-does not silently fall back to another model.
+The offline deterministic fixture is the default. Selecting `OpenRouter`
+creates a local `NEEDS_REVIEW` candidate and does not contact the provider.
+The operator must make a separate explicit provider-approval request before
+`OPENROUTER_API_KEY` or `OPENROUTER_MODEL` is read for a network call. Missing
+configuration or malformed model output fails that provider action with a typed
+error and does not silently fall back to another model.
 
-An OpenRouter run performs two source-bound structured calls: a creative-plan
-call that returns a creative direction and claim-bound beats, followed by the
-campaign-copy call. Both responses are schema-checked locally. The resulting
-provider/model/request metadata is retained in the local run evidence, while
-credentials and full provider payloads are never written to public artifacts.
-The plan and copy calls have no render, approval, or publishing authority; the
-same explicit review and export gates apply to every provider.
+The approval-bound HTTP action is:
+
+```text
+POST /api/runs/<run_id>/provider-approve
+{"confirm": true}
+```
+
+After the provider plan and campaign copy are schema-checked and persisted, the
+run returns to `NEEDS_REVIEW`. The normal render approval is still required.
+Provider output has no render, approval, publishing, or deployment authority.
+
+An approved OpenRouter transfer performs two source-bound structured calls: a
+creative-plan call that returns a creative direction and claim-bound beats,
+followed by the campaign-copy call. Both responses are schema-checked locally.
+The resulting provider/model/request metadata is retained in local run
+evidence, while credentials and full provider payloads are never written to
+public artifacts. The same explicit review, render, and export gates apply to
+every provider.
 
 ## Evidence boundary
 

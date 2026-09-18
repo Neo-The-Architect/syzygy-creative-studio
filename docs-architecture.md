@@ -170,7 +170,9 @@ The primary action is “Create a creative run.” Supporting actions are “Ins
 
 ## Provider policy
 
-OpenRouter is the reasoning plane, not the authority plane. The provider adapter should:
+OpenRouter is the reasoning plane, not the authority plane. Candidate creation
+must remain local; a separate explicit provider-approval action is required
+before any OpenRouter transfer. The provider adapter should:
 
 - accept an explicit model route;
 - use strict structured output when supported;
