@@ -1,0 +1,14 @@
+{
+  "boundary": "LOCAL_HTTP_SECURITY_EDGE",
+  "status": "PASS",
+  "coverage": "bounded manual source-backed check",
+  "formal_scan": "UNAVAILABLE_IN_CURRENT_HOST",
+  "headers": {
+    "x_content_type_options": "nosniff",
+    "content_security_policy": true
+  },
+  "traversal_request": {"status": 404},
+  "oversize_request": {"bytes_over_limit": true, "status": 413},
+  "non_loopback_binding": "explicit opt-in required",
+  "external_effects": "NOT_ATTEMPTED"
+}

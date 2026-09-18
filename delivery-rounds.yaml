@@ -33,7 +33,10 @@ rounds:
       - examples/content-pack-run/run-summary.json
   security:
     status: pending
-    evidence: []
+    evidence:
+      - apps/creative-studio/app.py
+      - apps/creative-studio/tests/test_app.py
+      - examples/security-boundary-run/run-summary.json
   optimize:
     status: pending
     evidence: []

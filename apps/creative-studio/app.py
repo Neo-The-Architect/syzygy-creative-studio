@@ -9,9 +9,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 from html import escape
+import ipaddress
 import json
 import mimetypes
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -52,6 +54,8 @@ HYPERFRAMES_SHOWCASE = (
 DATA_ROOT = ROOT / "data"
 RUNS_ROOT = DATA_ROOT / "runs"
 WEB_ROOT = ROOT / "web"
+MAX_REQUEST_BYTES = 2 * 1024 * 1024
+RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 def utc_now() -> str:
@@ -78,6 +82,25 @@ def read_json(path: Path) -> dict[str, Any]:
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def is_safe_run_id(run_id: str) -> bool:
+    return bool(RUN_ID_PATTERN.fullmatch(run_id)) and run_id not in {".", ".."}
+
+
+def require_safe_run_id(run_id: str) -> str:
+    if not is_safe_run_id(run_id):
+        raise ValueError("invalid run id")
+    return run_id
+
+
+def is_loopback_host(host: str) -> bool:
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def fixture_property() -> dict[str, Any]:
@@ -416,6 +439,7 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
             return existing
 
     run_id = run_id or f"run-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
+    require_safe_run_id(run_id)
     run_dir = RUNS_ROOT / run_id
     if run_dir.exists():
         raise ValueError(f"run already exists: {run_id}")
@@ -683,6 +707,8 @@ class StudioHandler(BaseHTTPRequestHandler):
         body = json.dumps(value, indent=2, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -693,6 +719,8 @@ class StudioHandler(BaseHTTPRequestHandler):
             body = (WEB_ROOT / "index.html").read_bytes()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -705,7 +733,10 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
         if request_path.startswith("/api/runs/") and "/artifacts/" in request_path:
             prefix, relative = request_path.split("/artifacts/", 1)
-            run_id = prefix.removeprefix("/api/runs/")
+            run_id = unquote(prefix.removeprefix("/api/runs/"))
+            if not is_safe_run_id(run_id):
+                self.send_json({"error": "artifact not found"}, HTTPStatus.NOT_FOUND)
+                return
             root = (RUNS_ROOT / run_id).resolve()
             candidate = (root / unquote(relative)).resolve()
             if not root.exists() or root not in candidate.parents or not candidate.is_file():
@@ -714,12 +745,17 @@ class StudioHandler(BaseHTTPRequestHandler):
             body = candidate.read_bytes()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", mimetypes.guess_type(candidate.name)[0] or "application/octet-stream")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
             return
         if request_path.startswith("/api/runs/"):
-            run_id = request_path.removeprefix("/api/runs/").split("/", 1)[0]
+            run_id = unquote(request_path.removeprefix("/api/runs/").split("/", 1)[0])
+            if not is_safe_run_id(run_id):
+                self.send_json({"error": "run not found"}, HTTPStatus.NOT_FOUND)
+                return
             path = RUNS_ROOT / run_id / "run.json"
             if path.exists():
                 self.send_json(read_json(path))
@@ -729,7 +765,14 @@ class StudioHandler(BaseHTTPRequestHandler):
         self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:  # noqa: N802
-        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self.send_json({"error": "invalid Content-Length"}, HTTPStatus.BAD_REQUEST)
+            return
+        if length < 0 or length > MAX_REQUEST_BYTES:
+            self.send_json({"error": f"request body exceeds {MAX_REQUEST_BYTES} bytes"}, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+            return
         try:
             payload = json.loads(self.rfile.read(length) or b"{}")
             request_path = urlsplit(self.path).path
@@ -737,16 +780,19 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self.send_json(create_run(payload), HTTPStatus.CREATED)
                 return
             if request_path.startswith("/api/runs/") and request_path.endswith("/approve"):
-                run_id = request_path.removeprefix("/api/runs/").removesuffix("/approve").strip("/")
+                run_id = unquote(request_path.removeprefix("/api/runs/").removesuffix("/approve").strip("/"))
+                require_safe_run_id(run_id)
                 self.send_json(approve_run(run_id))
                 return
             if request_path.startswith("/api/runs/") and request_path.endswith("/render"):
-                run_id = request_path.removeprefix("/api/runs/").removesuffix("/render").strip("/")
+                run_id = unquote(request_path.removeprefix("/api/runs/").removesuffix("/render").strip("/"))
+                require_safe_run_id(run_id)
                 quality = str(payload.get("quality", "looks"))
                 self.send_json(render_run(run_id, quality=quality))
                 return
             if request_path.startswith("/api/runs/") and request_path.endswith("/export"):
-                run_id = request_path.removeprefix("/api/runs/").removesuffix("/export").strip("/")
+                run_id = unquote(request_path.removeprefix("/api/runs/").removesuffix("/export").strip("/"))
+                require_safe_run_id(run_id)
                 self.send_json(export_run(run_id))
                 return
             self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
@@ -774,6 +820,8 @@ def main() -> int:
         return 0 if result["status"] == "NEEDS_REVIEW" else 1
 
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    if not is_loopback_host(args.host) and os.environ.get("SYZYGY_CREATIVE_STUDIO_ALLOW_NON_LOOPBACK") != "1":
+        parser.error("non-loopback binding requires SYZYGY_CREATIVE_STUDIO_ALLOW_NON_LOOPBACK=1")
     server = ThreadingHTTPServer((args.host, args.port), StudioHandler)
     print(f"Syzygy Creative Studio listening at http://{args.host}:{args.port}")
     try:

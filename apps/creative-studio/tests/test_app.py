@@ -64,6 +64,16 @@ class CreativeStudioMvpTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported output target"):
             app.create_run({"prompt": "Reject unknown adapter", "output_targets": ["teleporter"]}, run_id="run-test-003b", run_checks=False)
 
+    def test_run_id_and_binding_boundaries_fail_closed(self):
+        self.assertTrue(app.is_safe_run_id("run-20260918T000000Z-abcd1234"))
+        self.assertFalse(app.is_safe_run_id("../outside"))
+        self.assertFalse(app.is_safe_run_id("run/child"))
+        self.assertTrue(app.is_loopback_host("127.0.0.1"))
+        self.assertTrue(app.is_loopback_host("localhost"))
+        self.assertFalse(app.is_loopback_host("0.0.0.0"))
+        with self.assertRaisesRegex(ValueError, "invalid run id"):
+            app.create_run({"prompt": "Reject path run id"}, run_id="../outside", run_checks=False)
+
     def test_idempotency_key_returns_original_run(self):
         with tempfile.TemporaryDirectory() as temp:
             old_runs = app.RUNS_ROOT
