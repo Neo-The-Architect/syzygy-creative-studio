@@ -86,6 +86,9 @@ issues:
     evidence:
       - packages/real-estate-pipeline/src/pipeline.py
       - packages/real-estate-pipeline/tests/test_pipeline.py
+      - apps/creative-studio/app.py
+      - apps/creative-studio/tests/test_app.py
+      - README.md
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/1
   - id: ISSUE-0003
     fingerprint: sha256:hyperframes-render-export-not-wired
