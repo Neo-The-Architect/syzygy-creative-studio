@@ -29,9 +29,11 @@ rounds:
       - apps/creative-studio/tests/test_app.py
       - packages/real-estate-pipeline/tests/test_pipeline.py
       - scripts/verify_local.py
+      - scripts/verify_runtime.py
       - examples/idempotency-run/run-summary.json
       - examples/exported-run/run-summary.json
       - examples/content-pack-run/run-summary.json
+      - examples/runtime-verifier-run/run-summary.json
   security:
     status: pending
     evidence:
