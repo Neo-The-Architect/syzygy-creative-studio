@@ -1,0 +1,15 @@
+{
+  "source_url": "local://synthetic-fixture",
+  "address": "100 Example Avenue, Testville",
+  "price": "$625,000",
+  "beds": 3,
+  "baths": 2.5,
+  "area_sqft": 2100,
+  "features": [
+    "open kitchen",
+    "natural light",
+    "covered patio",
+    "dedicated office"
+  ],
+  "description": "Synthetic fixture only. Not a real listing."
+}

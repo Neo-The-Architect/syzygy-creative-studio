@@ -1,0 +1,360 @@
+"""Syzygy Creative Studio: local-first MVP service.
+
+This is a bounded source-to-preview slice. It deliberately stops at NEEDS_REVIEW
+unless an operator explicitly approves a run. No external publication occurs.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import uuid
+from datetime import datetime, timezone
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parent
+_base_candidates = [ROOT, ROOT.parent, *ROOT.parents]
+PROJECT_ROOT = next(
+    (
+        candidate
+        for candidate in _base_candidates
+        if (candidate / "packages" / "real-estate-pipeline").exists()
+        or (candidate / "ai-real-estate-marketing-pipeline").exists()
+    ),
+    ROOT.parent,
+)
+PIPELINE_ROOT = (
+    PROJECT_ROOT / "packages" / "real-estate-pipeline"
+    if (PROJECT_ROOT / "packages" / "real-estate-pipeline").exists()
+    else PROJECT_ROOT / "ai-real-estate-marketing-pipeline"
+)
+PIPELINE_SRC = PIPELINE_ROOT / "src"
+FIXTURE_PROPERTY = PIPELINE_ROOT / "fixtures" / "property.json"
+FIXTURE_IMAGES = PIPELINE_ROOT / "fixtures" / "images"
+HYPERFRAMES_SHOWCASE = (
+    PROJECT_ROOT / "packages" / "hyperframes-showcase"
+    if (PROJECT_ROOT / "packages" / "hyperframes-showcase").exists()
+    else PROJECT_ROOT / "syzygy-creative-fabric-showcase"
+)
+DATA_ROOT = ROOT / "data"
+RUNS_ROOT = DATA_ROOT / "runs"
+WEB_ROOT = ROOT / "web"
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def digest_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def digest_json(value: Any) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def read_json(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def fixture_property() -> dict[str, Any]:
+    return read_json(FIXTURE_PROPERTY)
+
+
+def import_pipeline() -> Any:
+    if str(PIPELINE_SRC) not in sys.path:
+        sys.path.insert(0, str(PIPELINE_SRC))
+    import pipeline  # type: ignore[import-not-found]
+
+    return pipeline
+
+
+def copy_hyperframes_project(destination: Path, run: dict[str, Any], source: dict[str, Any]) -> None:
+    if destination.exists():
+        shutil.rmtree(destination)
+    shutil.copytree(
+        HYPERFRAMES_SHOWCASE,
+        destination,
+        ignore=shutil.ignore_patterns("node_modules", "renders", "meta.json", "snapshots"),
+    )
+    brief = destination / "BRIEF.md"
+    brief.write_text(
+        "# Creative Fabric run\n\n"
+        f"Run: `{run['run_id']}`\n\n"
+        f"Intent: {run['request']['prompt']}\n\n"
+        "This composition is generated locally and remains pending operator review.\n",
+        encoding="utf-8",
+    )
+    index = destination / "index.html"
+    composition = index.read_text(encoding="utf-8")
+    address = str(source.get("address", "Approved source"))
+    address_parts = address.split(",", 1)
+    address_html = address_parts[0] + ("<br />" + address_parts[1].strip() if len(address_parts) == 2 else "")
+    specs = f"{source.get('beds', '?')} beds · {source.get('baths', '?')} baths<br />{source.get('area_sqft', '?')} sq ft"
+    composition = composition.replace("100 Example<br />Avenue", address_html)
+    composition = composition.replace("Testville<br />3 beds · 2.5 baths<br />2,100 sq ft", specs)
+    composition = composition.replace("$625,000", str(source.get("price", "Price on request")))
+    index.write_text(composition, encoding="utf-8")
+
+
+def run_hyperframes_checks(project: Path, run_dir: Path) -> dict[str, Any]:
+    if os.environ.get("SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES") == "1":
+        return {"status": "SKIPPED", "reason": "explicit_test_override"}
+
+    npx = "npx.cmd" if os.name == "nt" else "npx"
+    check = subprocess.run(
+        [npx, "hyperframes@0.8.46", "check", "--json", "--strict"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    result: dict[str, Any] = {
+        "status": "PASS" if check.returncode == 0 else "FAIL",
+        "returncode": check.returncode,
+        "stdout": check.stdout[-12000:],
+        "stderr": check.stderr[-12000:],
+    }
+
+    if check.returncode == 0:
+        snapshot = subprocess.run(
+            [npx, "hyperframes@0.8.46", "snapshot", "--at", "1,5,9,13,17", "--json"],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+        result["snapshot"] = {
+            "status": "PASS" if snapshot.returncode == 0 else "FAIL",
+            "returncode": snapshot.returncode,
+            "stdout": snapshot.stdout[-12000:],
+            "stderr": snapshot.stderr[-12000:],
+        }
+
+    write_json(run_dir / "hyperframes-check.json", result)
+    return result
+
+
+def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: bool = True) -> dict[str, Any]:
+    prompt = str(payload.get("prompt", "")).strip()
+    if not prompt:
+        raise ValueError("prompt is required")
+
+    provider = str(payload.get("provider", "deterministic"))
+    if provider not in {"deterministic", "openrouter"}:
+        raise ValueError("provider must be deterministic or openrouter")
+
+    output_targets = payload.get("output_targets") or ["video"]
+    if not isinstance(output_targets, list) or not output_targets:
+        raise ValueError("output_targets must be a non-empty list")
+
+    run_id = run_id or f"run-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
+    run_dir = RUNS_ROOT / run_id
+    if run_dir.exists():
+        raise ValueError(f"run already exists: {run_id}")
+    run_dir.mkdir(parents=True, exist_ok=False)
+
+    request = {
+        "prompt": prompt,
+        "provider": provider,
+        "output_targets": output_targets,
+        "created_at": utc_now(),
+        "external_effects": "NOT_ATTEMPTED",
+    }
+    source = payload.get("source") or fixture_property()
+    write_json(run_dir / "request.json", request)
+    write_json(run_dir / "inputs" / "source.json", source)
+    images_dir = run_dir / "inputs" / "images"
+    shutil.copytree(FIXTURE_IMAGES, images_dir)
+
+    artifacts_dir = run_dir / "artifacts"
+    pipeline = import_pipeline()
+    pipeline_result = pipeline.run_pipeline(
+        str(run_dir / "inputs" / "source.json"),
+        str(images_dir),
+        str(artifacts_dir),
+        provider=provider,
+    )
+
+    run_record: dict[str, Any] = {
+        "run_id": run_id,
+        "status": "COMPOSITION_READY",
+        "request": request,
+        "source_manifest": {
+            "path": "inputs/source.json",
+            "sha256": digest_file(run_dir / "inputs" / "source.json"),
+        },
+        "plan": {
+            "brief": prompt,
+            "output_targets": output_targets,
+            "provider": provider,
+            "mode": "DETERMINISTIC_FIXTURE" if provider == "deterministic" else "OPENROUTER",
+            "schema_version": "creative.plan@1.0.0",
+        },
+        "pipeline": pipeline_result["audit"],
+        "external_effects": "NOT_ATTEMPTED",
+        "created_at": request["created_at"],
+    }
+    write_json(run_dir / "plan.json", run_record["plan"])
+
+    hyperframes_dir = run_dir / "hyperframes"
+    copy_hyperframes_project(hyperframes_dir, {"run_id": run_id, "request": request}, source)
+    run_record["composition"] = {"path": "hyperframes", "source": "editable_project_folder"}
+
+    checks = run_hyperframes_checks(hyperframes_dir, run_dir) if run_checks else {"status": "NOT_RUN"}
+    run_record["checks"] = checks
+    if checks.get("status") == "PASS" and checks.get("snapshot", {}).get("status") == "PASS":
+        run_record["status"] = "NEEDS_REVIEW"
+    elif checks.get("status") in {"NOT_RUN", "SKIPPED"}:
+        run_record["status"] = "NEEDS_REVIEW"
+    else:
+        run_record["status"] = "BLOCKED"
+
+    evidence = {
+        "evidence_version": "creative.evidence@1.0.0",
+        "run_id": run_id,
+        "source_sha256": run_record["source_manifest"]["sha256"],
+        "plan_sha256": digest_file(run_dir / "plan.json"),
+        "pipeline_audit": "artifacts/audit.json",
+        "hyperframes_check": "hyperframes-check.json",
+        "external_effects": "NOT_ATTEMPTED",
+        "qualification_boundary": "LOCAL_SOURCE_TO_PREVIEW",
+    }
+    write_json(run_dir / "evidence.json", evidence)
+    run_record["evidence"] = evidence
+    write_json(run_dir / "run.json", run_record)
+    return run_record
+
+
+def list_runs() -> list[dict[str, Any]]:
+    if not RUNS_ROOT.exists():
+        return []
+    runs = []
+    for path in RUNS_ROOT.glob("*/run.json"):
+        try:
+            runs.append(read_json(path))
+        except (OSError, json.JSONDecodeError):
+            continue
+    return sorted(runs, key=lambda item: item.get("created_at", ""), reverse=True)
+
+
+def approve_run(run_id: str) -> dict[str, Any]:
+    path = RUNS_ROOT / run_id / "run.json"
+    if not path.exists():
+        raise FileNotFoundError(run_id)
+    run = read_json(path)
+    if run.get("status") != "NEEDS_REVIEW":
+        raise ValueError(f"run is not awaiting review: {run.get('status')}")
+    run["status"] = "APPROVED"
+    run["approved_at"] = utc_now()
+    run["external_effects"] = "NOT_ATTEMPTED"
+    write_json(path, run)
+    return run
+
+
+class StudioHandler(BaseHTTPRequestHandler):
+    server_version = "SyzygyCreativeStudio/0.1"
+
+    def send_json(self, value: Any, status: int = HTTPStatus.OK) -> None:
+        body = json.dumps(value, indent=2, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path == "/" or self.path == "/index.html":
+            body = (WEB_ROOT / "index.html").read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path == "/api/health":
+            self.send_json({"status": "PASS", "service": "syzygy-creative-studio", "external_effects": "DISABLED"})
+            return
+        if self.path == "/api/runs":
+            self.send_json({"runs": list_runs()})
+            return
+        if self.path.startswith("/api/runs/"):
+            run_id = self.path.removeprefix("/api/runs/").split("/", 1)[0]
+            path = RUNS_ROOT / run_id / "run.json"
+            if path.exists():
+                self.send_json(read_json(path))
+            else:
+                self.send_json({"error": "run not found"}, HTTPStatus.NOT_FOUND)
+            return
+        self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
+
+    def do_POST(self) -> None:  # noqa: N802
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            if self.path == "/api/runs":
+                self.send_json(create_run(payload), HTTPStatus.CREATED)
+                return
+            if self.path.startswith("/api/runs/") and self.path.endswith("/approve"):
+                run_id = self.path.removeprefix("/api/runs/").removesuffix("/approve").strip("/")
+                self.send_json(approve_run(run_id))
+                return
+            self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
+        except FileNotFoundError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
+        except (ValueError, json.JSONDecodeError, subprocess.SubprocessError) as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        except Exception as exc:  # defensive boundary for the local service
+            self.send_json({"error": f"internal error: {exc}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def log_message(self, format: str, *args: Any) -> None:
+        return
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run the Syzygy Creative Studio local MVP")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--once", action="store_true", help="run the deterministic fixture once and exit")
+    args = parser.parse_args()
+
+    if args.once:
+        result = create_run({"prompt": "Create a cinematic property showcase for this listing.", "output_targets": ["video"]})
+        print(json.dumps({"run_id": result["run_id"], "status": result["status"], "evidence": result["evidence"]}, indent=2))
+        return 0 if result["status"] == "NEEDS_REVIEW" else 1
+
+    DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    server = ThreadingHTTPServer((args.host, args.port), StudioHandler)
+    print(f"Syzygy Creative Studio listening at http://{args.host}:{args.port}")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        server.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

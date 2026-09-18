@@ -1,0 +1,68 @@
+schema: 1
+project: syzygy-creative-studio
+target: public-mvp
+current_round: assemble
+intelligence_pack:
+  status: complete
+  evidence:
+    - docs-architecture.md
+    - docs-coding-agent-prompt.md
+rounds:
+  assemble:
+    status: complete
+    evidence:
+      - apps/creative-studio/app.py
+      - packages/real-estate-pipeline/src/pipeline.py
+      - packages/hyperframes-showcase/index.html
+      - apps/creative-studio/tests/test_app.py
+  integrate:
+    status: pending
+    evidence: []
+  correctness:
+    status: pending
+    evidence: []
+  security:
+    status: pending
+    evidence: []
+  optimize:
+    status: pending
+    evidence: []
+components:
+  - id: creative-studio-local-app
+    attempted: true
+    assembled: true
+    connected: true
+    active: true
+    issue_ids: []
+  - id: property-pipeline
+    attempted: true
+    assembled: true
+    connected: true
+    active: true
+    issue_ids: []
+  - id: hyperframes-composition
+    attempted: true
+    assembled: true
+    connected: true
+    active: true
+    issue_ids: []
+  - id: external-publishing
+    attempted: false
+    assembled: false
+    connected: false
+    active: false
+    issue_ids: [ISSUE-0001]
+issues:
+  - id: ISSUE-0001
+    fingerprint: sha256:external-effects-disabled-by-design
+    severity: medium
+    status: open
+    round_found: assemble
+    activation_blocking: false
+    evidence:
+      - README.md
+release:
+  requested: false
+  exact_commit: ""
+  rollback_evidence: []
+  attestation_evidence: []

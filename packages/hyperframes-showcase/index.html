@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      :root { --bg: #081522; --fg: #f4f7fa; --muted: #9fb5c6; --accent: #ffd166; --secondary: #83b7d5; --panel: rgba(15, 35, 52, 0.88); }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+      body { font-family: Arial, ui-sans-serif, system-ui, sans-serif; color: var(--fg); }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+      .scene { position: absolute; inset: 0; overflow: hidden; }
+      .grain { position: absolute; inset: 0; opacity: 0.12; background-image: radial-gradient(rgba(255,255,255,0.18) 0.7px, transparent 0.7px); background-size: 7px 7px; mix-blend-mode: soft-light; }
+      .orb { position: absolute; border: 2px solid rgba(255,209,102,0.34); border-radius: 50%; }
+      .orb-a { width: 680px; height: 680px; right: -210px; top: -190px; }
+      .orb-b { width: 440px; height: 440px; left: -180px; bottom: -180px; border-color: rgba(131,183,213,0.24); }
+      .eyebrow { color: var(--accent); letter-spacing: 0.23em; font-size: 24px; font-weight: 700; text-transform: uppercase; }
+      .display { font-size: 106px; line-height: 0.98; letter-spacing: -0.055em; font-weight: 800; }
+      .body-copy { color: var(--muted); font-size: 34px; line-height: 1.25; }
+      .meta { color: var(--secondary); font-size: 22px; letter-spacing: 0.14em; text-transform: uppercase; }
+      .accent-rule { height: 4px; width: 220px; background: var(--accent); transform-origin: left center; }
+      .scene-one .content { position: absolute; left: 130px; top: 210px; width: 1000px; }
+      .scene-one .subline { margin-top: 34px; width: 720px; }
+      .scene-one .stamp { position: absolute; right: 130px; bottom: 115px; color: rgba(244,247,250,0.55); font-size: 20px; letter-spacing: 0.12em; }
+      .scene-two .image-wrap { position: absolute; left: 118px; top: 115px; width: 1120px; height: 850px; overflow: hidden; border: 2px solid rgba(255,255,255,0.18); }
+      .scene-two img { width: 100%; height: 100%; object-fit: cover; transform-origin: 50% 50%; }
+      .scene-two .panel { position: absolute; right: 120px; top: 180px; width: 490px; padding: 48px; background: var(--panel); border-left: 4px solid var(--accent); }
+      .scene-two h2 { font-size: 64px; line-height: 1.02; margin: 18px 0 30px; letter-spacing: -0.04em; }
+      .scene-two .specs { color: var(--fg); font-size: 29px; line-height: 1.5; }
+      .scene-two .price { color: var(--accent); font-size: 42px; font-weight: 700; margin-top: 26px; }
+      .scene-three .header { position: absolute; left: 130px; top: 110px; }
+      .scene-three .feature-grid { position: absolute; left: 130px; top: 330px; display: grid; grid-template-columns: 1fr 1fr; gap: 28px 100px; width: 1200px; }
+      .feature { display: flex; align-items: baseline; gap: 22px; border-bottom: 2px solid rgba(255,255,255,0.16); padding: 18px 0 24px; }
+      .feature .num { color: var(--accent); font-size: 30px; font-weight: 800; }
+      .feature .label { font-size: 42px; font-weight: 700; }
+      .scene-three .image-strip { position: absolute; right: 120px; top: 270px; width: 360px; height: 610px; overflow: hidden; border: 2px solid rgba(131,183,213,0.45); }
+      .scene-three .image-strip img { width: 100%; height: 100%; object-fit: cover; }
+      .scene-four .photo { position: absolute; left: 100px; top: 100px; width: 960px; height: 880px; overflow: hidden; }
+      .scene-four .photo img { width: 100%; height: 100%; object-fit: cover; }
+      .scene-four .card { position: absolute; right: 130px; top: 180px; width: 610px; min-height: 590px; padding: 58px; background: #f4f7fa; color: #10283c; }
+      .scene-four .card h2 { font-size: 68px; line-height: 1; margin: 20px 0 30px; letter-spacing: -0.05em; }
+      .scene-four .card p { font-size: 30px; line-height: 1.3; }
+      .scene-four .card .card-footer { margin-top: 80px; color: #285a7b; font-size: 24px; letter-spacing: 0.12em; text-transform: uppercase; }
+      .scene-four .card .meta { color: #547689; }
+      .scene-five .center { position: absolute; left: 210px; top: 200px; width: 1500px; text-align: center; }
+      .scene-five .center .display { font-size: 94px; }
+      .scene-five .center .body-copy { margin: 38px auto 0; width: 850px; }
+      .approval-rail { position: absolute; left: 210px; right: 210px; bottom: 140px; display: flex; align-items: center; justify-content: space-between; border-top: 2px solid rgba(255,255,255,0.22); padding-top: 22px; }
+      .approval-rail span { color: var(--muted); font-size: 22px; letter-spacing: 0.12em; text-transform: uppercase; }
+      .approval-rail strong { color: var(--accent); font-size: 24px; letter-spacing: 0.15em; text-transform: uppercase; }
+      .clip { position: absolute; inset: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="creative-fabric-showcase" data-start="0" data-duration="18" data-width="1920" data-height="1080" data-fps="30">
+      <section id="scene-signal" class="scene scene-one clip" data-start="0" data-duration="3" data-track-index="0">
+        <div class="grain"></div><div class="orb orb-a" data-layout-allow-overflow="true"></div><div class="orb orb-b" data-layout-allow-overflow="true"></div>
+        <div class="content"><div class="eyebrow one-eyebrow">SYZYGY / CREATIVE FABRIC</div><div class="accent-rule one-rule" style="margin-top: 34px"></div><div class="display one-title" style="margin-top: 34px">Turn source<br />into signal.</div><div class="body-copy subline one-subline">A reusable creative run for property films, websites, presentations, and whatever the next brief demands.</div></div>
+        <div class="stamp">SOURCE PACKAGE / SYNTHETIC FIXTURE / REVIEW ONLY</div>
+      </section>
+      <section id="scene-arrival" class="scene scene-two clip" data-start="3" data-duration="4" data-track-index="1">
+        <div class="grain"></div><div class="image-wrap"><img id="hero-image" data-layout-allow-overflow="true" src="./assets/01-exterior.png" alt="Synthetic fixture exterior" /></div><div class="panel two-panel"><div class="eyebrow">PROPERTY SOURCE</div><h2>100 Example<br />Avenue</h2><div class="specs">Testville<br />3 beds · 2.5 baths<br />2,100 sq ft</div><div class="price">$625,000</div></div>
+      </section>
+      <section id="scene-details" class="scene scene-three clip" data-start="7" data-duration="4" data-track-index="2">
+        <div class="grain"></div><div class="orb orb-b" data-layout-allow-overflow="true"></div><div class="header"><div class="eyebrow">CLAIM LEDGER / SUPPORTED</div><div class="display" style="font-size: 78px; margin-top: 18px">Details<br />become movement.</div></div><div class="feature-grid"><div class="feature feature-1"><span class="num">01</span><span class="label">Open kitchen</span></div><div class="feature feature-2"><span class="num">02</span><span class="label">Natural light</span></div><div class="feature feature-3"><span class="num">03</span><span class="label">Covered patio</span></div><div class="feature feature-4"><span class="num">04</span><span class="label">Dedicated office</span></div></div><div class="image-strip"><img src="./assets/03-kitchen.png" alt="Synthetic fixture kitchen" /></div>
+      </section>
+      <section id="scene-living-board" class="scene scene-four clip" data-start="11" data-duration="4" data-track-index="3">
+        <div class="grain"></div><div class="photo"><img id="board-image" data-layout-allow-overflow="true" src="./assets/05-patio.png" alt="Synthetic fixture patio" /></div><div class="card four-card"><div class="meta">LIVING BOARD / 04</div><h2>One source.<br />Many surfaces.</h2><p>HyperFrames keeps the project editable: scenes, timing, media, and approved variables stay inspectable instead of collapsing into a black-box export.</p><div class="card-footer">Creative Fabric / render candidate</div></div>
+      </section>
+      <section id="scene-handoff" class="scene scene-five clip" data-start="15" data-duration="3" data-track-index="4">
+        <div class="grain"></div><div class="orb orb-a" data-layout-allow-overflow="true"></div><div class="orb orb-b" data-layout-allow-overflow="true"></div><div class="center"><div class="eyebrow">NEXT TRANSITION / HUMAN REVIEW</div><div class="display" style="margin-top: 30px">Ready for<br />the next brief.</div><div class="body-copy">Generate, inspect, revise, and then promote the approved artifact through Syzygy’s existing authority path.</div></div><div class="approval-rail"><span>creative-fabric.run / 0001</span><strong>READY FOR REVIEW</strong><span>external effects disabled</span></div>
+      </section>
+    </div>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo(".one-eyebrow", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 0.15)
+        .fromTo(".one-rule", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power2.out" }, 0.35)
+        .fromTo(".one-title", { opacity: 0, x: -70 }, { opacity: 1, x: 0, duration: 0.7, ease: "power3.out" }, 0.55)
+        .fromTo(".one-subline", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.55, ease: "power2.out" }, 1.0)
+        .fromTo(".stamp", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 1.4)
+        .fromTo(".two-panel", { opacity: 0, x: 90 }, { opacity: 1, x: 0, duration: 0.65, ease: "power3.out" }, 3.2)
+        .fromTo("#hero-image", { scale: 1.03 }, { scale: 1.12, duration: 3.6, ease: "none" }, 3)
+        .fromTo(".feature-1, .feature-2, .feature-3, .feature-4", { opacity: 0, x: -35 }, { opacity: 1, x: 0, duration: 0.5, stagger: 0.15, ease: "power2.out" }, 7.3)
+        .fromTo(".scene-three .image-strip", { opacity: 0, y: 42 }, { opacity: 1, y: 0, duration: 0.65, ease: "power3.out" }, 7.55)
+        .fromTo("#board-image", { scale: 1.05, x: -20 }, { scale: 1.12, x: 20, duration: 4, ease: "none" }, 11)
+        .fromTo(".four-card", { opacity: 0, x: 80 }, { opacity: 1, x: 0, duration: 0.7, ease: "power3.out" }, 11.2)
+        .fromTo(".scene-five .center", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 15.15)
+        .fromTo(".approval-rail", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.55, ease: "power2.out" }, 15.75)
+        .to(".orb-a", { rotation: 18, duration: 18, ease: "none" }, 0)
+        .to(".orb-b", { rotation: -12, duration: 18, ease: "none" }, 0);
+      window.__timelines["creative-fabric-showcase"] = tl;
+    </script>
+  </body>
+</html>
