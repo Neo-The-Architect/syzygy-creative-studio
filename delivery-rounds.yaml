@@ -131,6 +131,16 @@ issues:
       - apps/creative-studio/tests/test_app.py
       - examples/fresh-runtime-run/run-summary.json
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/6
+  - id: ISSUE-0008
+    fingerprint: sha256:github-actions-runtime-and-runner-deprecation-warnings
+    severity: low
+    status: open
+    round_found: optimize
+    activation_blocking: false
+    evidence:
+      - .github/workflows/verify.yml
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/actions/runs/35333859622
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/7
 release:
   requested: false
   exact_commit: ""
