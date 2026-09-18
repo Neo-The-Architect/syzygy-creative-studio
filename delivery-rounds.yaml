@@ -176,12 +176,15 @@ issues:
   - id: ISSUE-0011
     fingerprint: sha256:openrouter-transfer-before-approval
     severity: medium
-    status: open
+    status: resolved
     round_found: security
     activation_blocking: false
     evidence:
       - apps/creative-studio/app.py
       - packages/real-estate-pipeline/src/pipeline.py
+      - apps/creative-studio/tests/test_app.py
+      - commit:d72d53f
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/actions/runs/35343738148
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/10
   - id: ISSUE-0012
     fingerprint: sha256:run-concurrency-and-storage-quotas
