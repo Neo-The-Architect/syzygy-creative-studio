@@ -16,6 +16,27 @@ import app  # noqa: E402
 
 
 class CreativeStudioMvpTests(unittest.TestCase):
+    def test_openrouter_preflight_fails_before_partial_run_creation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            old_key = os.environ.pop("OPENROUTER_API_KEY", None)
+            old_model = os.environ.pop("OPENROUTER_MODEL", None)
+            app.RUNS_ROOT = Path(temp) / "runs"
+            try:
+                with self.assertRaisesRegex(ValueError, "OPENROUTER_API_KEY.*OPENROUTER_MODEL"):
+                    app.create_run(
+                        {"prompt": "Provider preflight", "provider": "openrouter"},
+                        run_id="run-openrouter-preflight",
+                        run_checks=False,
+                    )
+                self.assertFalse((app.RUNS_ROOT / "run-openrouter-preflight").exists())
+            finally:
+                app.RUNS_ROOT = old_runs
+                if old_key is not None:
+                    os.environ["OPENROUTER_API_KEY"] = old_key
+                if old_model is not None:
+                    os.environ["OPENROUTER_MODEL"] = old_model
+
     def test_head_routes_return_headers_without_body_and_preserve_containment(self):
         with tempfile.TemporaryDirectory() as temp:
             old_runs = app.RUNS_ROOT

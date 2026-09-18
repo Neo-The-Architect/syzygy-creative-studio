@@ -140,6 +140,18 @@ def build_creative_plan(prompt: str, source: dict[str, Any], output_targets: lis
     }
 
 
+def validate_provider_configuration(provider: str) -> None:
+    if provider != "openrouter":
+        return
+    missing = [
+        name
+        for name in ("OPENROUTER_API_KEY", "OPENROUTER_MODEL")
+        if not os.environ.get(name, "").strip()
+    ]
+    if missing:
+        raise ValueError(f"{', '.join(missing)} are required for provider=openrouter")
+
+
 def render_website(source: dict[str, Any], prompt: str, destination: Path) -> dict[str, str]:
     destination.mkdir(parents=True, exist_ok=True)
     features = "".join(f"<li>{escape(str(feature))}</li>" for feature in source.get("features", []))
@@ -409,6 +421,7 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
     provider = str(payload.get("provider", "deterministic"))
     if provider not in {"deterministic", "openrouter"}:
         raise ValueError("provider must be deterministic or openrouter")
+    validate_provider_configuration(provider)
 
     output_targets = payload.get("output_targets") or ["video"]
     if not isinstance(output_targets, list) or not output_targets:
