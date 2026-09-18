@@ -104,6 +104,68 @@ class CreativeStudioMvpTests(unittest.TestCase):
                 else:
                     os.environ["OPENROUTER_MODEL"] = old_model
 
+    def test_openrouter_provider_transfer_serializes_concurrent_requests(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            old_key = os.environ.get("OPENROUTER_API_KEY")
+            old_model = os.environ.get("OPENROUTER_MODEL")
+            app.RUNS_ROOT = Path(temp) / "runs"
+            os.environ["OPENROUTER_API_KEY"] = "test-key"
+            os.environ["OPENROUTER_MODEL"] = "test/model"
+            pipeline = app.import_pipeline()
+            source = app.fixture_property()
+            claims = pipeline.build_claims(source)
+            generated_plan = {
+                "creative_direction": "Serialized transfer",
+                "beats": [{"id": "arrival", "purpose": "source", "duration_seconds": 8, "claim_ids": [claim["claim_id"] for claim in claims]}],
+                "claim_ids": [claim["claim_id"] for claim in claims],
+                "provider_metadata": {"provider": "openrouter", "model": "test/model", "request_id": "serialized_123"},
+            }
+            pipeline_result = {"audit": {"status": "PASS", "provider": "openrouter:test/model"}, "campaign": {"claims": claims, "copy": {}}}
+            entered = threading.Event()
+            release = threading.Event()
+            errors = []
+            try:
+                with mock.patch.object(pipeline, "run_pipeline", return_value={"audit": {"status": "PASS", "provider": "deterministic"}, "campaign": {"claims": claims, "copy": {}}}):
+                    app.create_run({"prompt": "Serialized provider approval", "provider": "openrouter"}, run_id="run-provider-serialized", run_checks=False)
+
+                def blocked_plan(*_args, **_kwargs):
+                    entered.set()
+                    self.assertTrue(release.wait(timeout=5))
+                    return generated_plan
+
+                def first_transfer():
+                    try:
+                        app.approve_provider_run("run-provider-serialized", confirm=True)
+                    except Exception as exc:  # pragma: no cover - assertion below reports unexpected worker failure
+                        errors.append(exc)
+
+                with mock.patch.object(pipeline, "openrouter_creative_plan", side_effect=blocked_plan) as provider_plan:
+                    with mock.patch.object(pipeline, "run_pipeline", return_value=pipeline_result):
+                        worker = threading.Thread(target=first_transfer)
+                        worker.start()
+                        self.assertTrue(entered.wait(timeout=5))
+                        with self.assertRaisesRegex(ValueError, "run operation already in progress"):
+                            app.approve_provider_run("run-provider-serialized", confirm=True)
+                        release.set()
+                        worker.join(timeout=5)
+                self.assertFalse(worker.is_alive())
+                self.assertEqual(errors, [])
+                provider_plan.assert_called_once()
+                final = app.read_json(app.RUNS_ROOT / "run-provider-serialized" / "run.json")
+                self.assertEqual(final["provider_transfer"], "TRANSFERRED")
+                self.assertEqual(final["provider_request"]["state"], "TRANSFERRED")
+            finally:
+                app.RUNS_ROOT = old_runs
+                if old_key is None:
+                    os.environ.pop("OPENROUTER_API_KEY", None)
+                else:
+                    os.environ["OPENROUTER_API_KEY"] = old_key
+                if old_model is None:
+                    os.environ.pop("OPENROUTER_MODEL", None)
+                else:
+                    os.environ["OPENROUTER_MODEL"] = old_model
+
     def test_head_routes_return_headers_without_body_and_preserve_containment(self):
         with tempfile.TemporaryDirectory() as temp:
             old_runs = app.RUNS_ROOT

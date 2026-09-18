@@ -77,6 +77,8 @@ MAX_INPUT_IMAGE_BYTES = bounded_env_int("SYZYGY_CREATIVE_STUDIO_MAX_INPUT_IMAGE_
 RUN_CREATION_SLOTS = threading.BoundedSemaphore(max(1, MAX_ACTIVE_RUNS))
 CREATE_RATE_LOCK = threading.Lock()
 CREATE_RATE_WINDOWS: dict[str, deque[float]] = defaultdict(deque)
+RUN_LOCKS_LOCK = threading.Lock()
+RUN_LOCKS: dict[str, threading.Lock] = {}
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
@@ -145,6 +147,12 @@ def require_safe_run_id(run_id: str) -> str:
     if not is_safe_run_id(run_id):
         raise ValueError("invalid run id")
     return run_id
+
+
+def run_lock(run_id: str) -> threading.Lock:
+    """Return one process-local lock for a run's state transitions."""
+    with RUN_LOCKS_LOCK:
+        return RUN_LOCKS.setdefault(run_id, threading.Lock())
 
 
 def resolve_artifact_path(run_id: str, relative: str) -> Path | None:
@@ -659,7 +667,7 @@ def create_run(
         RUN_CREATION_SLOTS.release()
 
 
-def approve_provider_run(run_id: str, confirm: bool = False) -> dict[str, Any]:
+def _approve_provider_run_unlocked(run_id: str, confirm: bool = False) -> dict[str, Any]:
     """Perform the explicit, approval-bound OpenRouter transfer for a local candidate."""
     if not confirm:
         raise ValueError("provider approval requires confirm=true")
@@ -675,6 +683,11 @@ def approve_provider_run(run_id: str, confirm: bool = False) -> dict[str, Any]:
         raise ValueError("run has no pending OpenRouter provider approval")
 
     validate_provider_configuration("openrouter")
+    provider_request["state"] = "IN_PROGRESS"
+    provider_request["started_at"] = utc_now()
+    run["provider_request"] = provider_request
+    run["provider_transfer"] = "IN_PROGRESS"
+    write_json(path, run)
     pipeline = import_pipeline()
     source = read_json(RUNS_ROOT / run_id / "inputs" / "source.json")
     claims = pipeline.build_claims(source)
@@ -729,6 +742,29 @@ def approve_provider_run(run_id: str, confirm: bool = False) -> dict[str, Any]:
     return run
 
 
+def approve_provider_run(run_id: str, confirm: bool = False) -> dict[str, Any]:
+    """Serialize provider transfer so one run cannot spend twice concurrently."""
+    lock = run_lock(run_id)
+    if not lock.acquire(blocking=False):
+        raise ValueError("run operation already in progress")
+    try:
+        try:
+            return _approve_provider_run_unlocked(run_id, confirm=confirm)
+        except Exception as exc:
+            path = RUNS_ROOT / run_id / "run.json"
+            if path.exists():
+                current = read_json(path)
+                provider_request = current.get("provider_request") or {}
+                if provider_request.get("state") == "IN_PROGRESS":
+                    provider_request.update({"state": "FAILED", "error": str(exc), "failed_at": utc_now()})
+                    current["provider_request"] = provider_request
+                    current["provider_transfer"] = "FAILED"
+                    write_json(path, current)
+            raise
+    finally:
+        lock.release()
+
+
 def list_runs() -> list[dict[str, Any]]:
     if not RUNS_ROOT.exists():
         return []
@@ -741,7 +777,7 @@ def list_runs() -> list[dict[str, Any]]:
     return sorted(runs, key=lambda item: item.get("created_at", ""), reverse=True)
 
 
-def approve_run(run_id: str) -> dict[str, Any]:
+def _approve_run_unlocked(run_id: str) -> dict[str, Any]:
     path = RUNS_ROOT / run_id / "run.json"
     if not path.exists():
         raise FileNotFoundError(run_id)
@@ -762,7 +798,18 @@ def approve_run(run_id: str) -> dict[str, Any]:
     return run
 
 
-def render_run(run_id: str, quality: str = "looks") -> dict[str, Any]:
+def approve_run(run_id: str) -> dict[str, Any]:
+    """Serialize approval so the same run cannot be approved twice concurrently."""
+    lock = run_lock(run_id)
+    if not lock.acquire(blocking=False):
+        raise ValueError("run operation already in progress")
+    try:
+        return _approve_run_unlocked(run_id)
+    finally:
+        lock.release()
+
+
+def _render_run_unlocked(run_id: str, quality: str = "looks") -> dict[str, Any]:
     """Render only the exact approved composition, after revalidating its evidence."""
     run_dir = RUNS_ROOT / run_id
     path = run_dir / "run.json"
@@ -795,6 +842,9 @@ def render_run(run_id: str, quality: str = "looks") -> dict[str, Any]:
     if checks.get("status") != "PASS" or (checks.get("snapshot") or {}).get("status") != "PASS":
         raise ValueError("render requires PASS HyperFrames check and snapshot evidence")
 
+    run["status"] = "RENDERING"
+    run["render_started_at"] = utc_now()
+    write_json(path, run)
     output = run_dir / "artifacts" / "hyperframes" / "reel.mp4"
     receipt: dict[str, Any] = {
         "receipt_version": "creative.render@1.0.0",
@@ -841,7 +891,28 @@ def render_run(run_id: str, quality: str = "looks") -> dict[str, Any]:
     return run
 
 
-def export_run(run_id: str) -> dict[str, Any]:
+def render_run(run_id: str, quality: str = "looks") -> dict[str, Any]:
+    """Serialize rendering and reopen the approved state after a failed attempt."""
+    lock = run_lock(run_id)
+    if not lock.acquire(blocking=False):
+        raise ValueError("run operation already in progress")
+    try:
+        try:
+            return _render_run_unlocked(run_id, quality=quality)
+        except Exception:
+            path = RUNS_ROOT / run_id / "run.json"
+            if path.exists():
+                current = read_json(path)
+                if current.get("status") == "RENDERING":
+                    current["status"] = "APPROVED"
+                    current.pop("render_started_at", None)
+                    write_json(path, current)
+            raise
+    finally:
+        lock.release()
+
+
+def _export_run_unlocked(run_id: str) -> dict[str, Any]:
     """Package a rendered run and its evidence without performing an external effect."""
     run_dir = RUNS_ROOT / run_id
     path = run_dir / "run.json"
@@ -859,6 +930,9 @@ def export_run(run_id: str) -> dict[str, Any]:
     if digest_file(render_path) != render_receipt.get("sha256"):
         raise ValueError("export refused: rendered MP4 hash does not match receipt")
 
+    run["status"] = "EXPORTING"
+    run["export_started_at"] = utc_now()
+    write_json(path, run)
     export_dir = run_dir / "artifacts" / "export"
     export_dir.mkdir(parents=True, exist_ok=True)
     output = export_dir / f"creative-run-{run_id}.zip"
@@ -907,6 +981,27 @@ def export_run(run_id: str) -> dict[str, Any]:
     run["external_effects"] = "NOT_ATTEMPTED"
     write_json(path, run)
     return run
+
+
+def export_run(run_id: str) -> dict[str, Any]:
+    """Serialize export packaging and reopen the rendered state after a failed attempt."""
+    lock = run_lock(run_id)
+    if not lock.acquire(blocking=False):
+        raise ValueError("run operation already in progress")
+    try:
+        try:
+            return _export_run_unlocked(run_id)
+        except Exception:
+            path = RUNS_ROOT / run_id / "run.json"
+            if path.exists():
+                current = read_json(path)
+                if current.get("status") == "EXPORTING":
+                    current["status"] = "RENDERED"
+                    current.pop("export_started_at", None)
+                    write_json(path, current)
+            raise
+    finally:
+        lock.release()
 
 
 class StudioHandler(BaseHTTPRequestHandler):
