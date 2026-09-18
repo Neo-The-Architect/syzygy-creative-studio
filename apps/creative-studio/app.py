@@ -18,8 +18,11 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
 import uuid
 import zipfile
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -57,6 +60,23 @@ RUNS_ROOT = DATA_ROOT / "runs"
 WEB_ROOT = ROOT / "web"
 MAX_REQUEST_BYTES = 2 * 1024 * 1024
 AUTH_TOKEN_ENV = "SYZYGY_CREATIVE_STUDIO_AUTH_TOKEN"
+
+
+def bounded_env_int(name: str, default: int, minimum: int = 1) -> int:
+    try:
+        return max(minimum, int(os.environ.get(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+MAX_ACTIVE_RUNS = bounded_env_int("SYZYGY_CREATIVE_STUDIO_MAX_ACTIVE_RUNS", 2)
+MAX_CREATE_REQUESTS_PER_MINUTE = bounded_env_int("SYZYGY_CREATIVE_STUDIO_MAX_CREATE_REQUESTS_PER_MINUTE", 30)
+MAX_RUN_STORAGE_BYTES = bounded_env_int("SYZYGY_CREATIVE_STUDIO_MAX_RUN_STORAGE_BYTES", 2 * 1024 * 1024 * 1024)
+MAX_INPUT_IMAGES = bounded_env_int("SYZYGY_CREATIVE_STUDIO_MAX_INPUT_IMAGES", 8)
+MAX_INPUT_IMAGE_BYTES = bounded_env_int("SYZYGY_CREATIVE_STUDIO_MAX_INPUT_IMAGE_BYTES", 12 * 1024 * 1024)
+RUN_CREATION_SLOTS = threading.BoundedSemaphore(max(1, MAX_ACTIVE_RUNS))
+CREATE_RATE_LOCK = threading.Lock()
+CREATE_RATE_WINDOWS: dict[str, deque[float]] = defaultdict(deque)
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
@@ -70,6 +90,37 @@ def digest_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def directory_size(path: Path) -> int:
+    if not path.exists():
+        return 0
+    return sum(candidate.stat().st_size for candidate in path.rglob("*") if candidate.is_file())
+
+
+def enforce_run_creation_limits(client_key: str) -> None:
+    """Reserve bounded local capacity before starting expensive run work."""
+    now = time.monotonic()
+    with CREATE_RATE_LOCK:
+        window = CREATE_RATE_WINDOWS[client_key]
+        while window and now - window[0] >= 60:
+            window.popleft()
+        if len(window) >= max(1, MAX_CREATE_REQUESTS_PER_MINUTE):
+            raise ValueError("run creation rate limit exceeded")
+        window.append(now)
+    if directory_size(RUNS_ROOT) >= max(1, MAX_RUN_STORAGE_BYTES):
+        raise ValueError("run storage quota exceeded")
+    if not RUN_CREATION_SLOTS.acquire(blocking=False):
+        raise ValueError("active run limit exceeded")
+
+
+def validate_input_media(images_dir: Path) -> None:
+    images = [path for path in images_dir.iterdir() if path.is_file()]
+    if len(images) > max(1, MAX_INPUT_IMAGES):
+        raise ValueError(f"input image limit exceeded: {MAX_INPUT_IMAGES}")
+    oversized = [path.name for path in images if path.stat().st_size > max(1, MAX_INPUT_IMAGE_BYTES)]
+    if oversized:
+        raise ValueError(f"input image size limit exceeded: {', '.join(oversized)}")
 
 
 def digest_json(value: Any) -> str:
@@ -453,7 +504,12 @@ def render_hyperframes(project: Path, output: Path, quality: str) -> dict[str, A
     }
 
 
-def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: bool = True) -> dict[str, Any]:
+def _create_run_unbounded(
+    payload: dict[str, Any],
+    run_id: str | None = None,
+    run_checks: bool = True,
+    client_key: str = "local",
+) -> dict[str, Any]:
     prompt = str(payload.get("prompt", "")).strip()
     if not prompt:
         raise ValueError("prompt is required")
@@ -510,6 +566,7 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
     write_json(run_dir / "inputs" / "source.json", source)
     images_dir = run_dir / "inputs" / "images"
     shutil.copytree(FIXTURE_IMAGES, images_dir)
+    validate_input_media(images_dir)
 
     claims = pipeline.build_claims(source)
     # OpenRouter is intentionally deferred until the explicit provider-approval
@@ -586,6 +643,20 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
     run_record["evidence"] = evidence
     write_json(run_dir / "run.json", run_record)
     return run_record
+
+
+def create_run(
+    payload: dict[str, Any],
+    run_id: str | None = None,
+    run_checks: bool = True,
+    client_key: str = "local",
+) -> dict[str, Any]:
+    """Create a run only after reserving bounded rate, work, and storage capacity."""
+    enforce_run_creation_limits(client_key)
+    try:
+        return _create_run_unbounded(payload, run_id=run_id, run_checks=run_checks, client_key=client_key)
+    finally:
+        RUN_CREATION_SLOTS.release()
 
 
 def approve_provider_run(run_id: str, confirm: bool = False) -> dict[str, Any]:
@@ -977,7 +1048,8 @@ class StudioHandler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length) or b"{}")
             request_path = urlsplit(self.path).path
             if request_path == "/api/runs":
-                self.send_json(create_run(payload), HTTPStatus.CREATED)
+                client_key = str(self.client_address[0])
+                self.send_json(create_run(payload, client_key=client_key), HTTPStatus.CREATED)
                 return
             if request_path.startswith("/api/runs/") and request_path.endswith("/provider-approve"):
                 run_id = unquote(request_path.removeprefix("/api/runs/").removesuffix("/provider-approve").strip("/"))

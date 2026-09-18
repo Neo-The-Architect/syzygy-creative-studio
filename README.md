@@ -104,6 +104,12 @@ is reported as `SKIP` by default; use `--require-health` when the persistent
 service itself is part of the acceptance boundary. The verifier never calls
 external providers or publishing APIs.
 
+Run creation is bounded by default: at most two expensive runs execute at
+once, each client is limited to 30 create requests per minute, input media is
+limited to eight files of 12 MiB each, and retained run data is capped at 2 GiB
+unless the operator deliberately changes the corresponding environment
+variables. Exceeding a ceiling fails closed with an explicit error.
+
 Exercise the complete live local HTTP lifecycle, including creation,
 idempotent retry, approval, HyperFrames render, export, and artifact GET/HEAD
 checks:

@@ -259,6 +259,40 @@ class CreativeStudioMvpTests(unittest.TestCase):
                 else:
                     os.environ["OPENROUTER_MODEL"] = old_model
 
+    def test_run_creation_limits_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            old_slots = app.RUN_CREATION_SLOTS
+            old_rate = app.MAX_CREATE_REQUESTS_PER_MINUTE
+            old_storage = app.MAX_RUN_STORAGE_BYTES
+            app.RUNS_ROOT = Path(temp) / "runs"
+            try:
+                app.RUN_CREATION_SLOTS = threading.BoundedSemaphore(0)
+                with self.assertRaisesRegex(ValueError, "active run limit"):
+                    app.create_run({"prompt": "bounded"}, run_id="run-active-limit", run_checks=False)
+
+                app.RUN_CREATION_SLOTS = threading.BoundedSemaphore(1)
+                app.MAX_CREATE_REQUESTS_PER_MINUTE = 1
+                app.CREATE_RATE_WINDOWS.clear()
+                pipeline = app.import_pipeline()
+                deterministic_result = {"audit": {"status": "PASS", "provider": "deterministic"}, "campaign": {"claims": [], "copy": {}}}
+                with mock.patch.object(pipeline, "run_pipeline", return_value=deterministic_result):
+                    app.create_run({"prompt": "first"}, run_id="run-rate-first", run_checks=False)
+                    with self.assertRaisesRegex(ValueError, "rate limit"):
+                        app.create_run({"prompt": "second"}, run_id="run-rate-second", run_checks=False)
+
+                app.MAX_CREATE_REQUESTS_PER_MINUTE = 30
+                app.CREATE_RATE_WINDOWS.clear()
+                app.MAX_RUN_STORAGE_BYTES = 1
+                with self.assertRaisesRegex(ValueError, "storage quota"):
+                    app.create_run({"prompt": "storage"}, run_id="run-storage-limit", run_checks=False)
+            finally:
+                app.RUNS_ROOT = old_runs
+                app.RUN_CREATION_SLOTS = old_slots
+                app.MAX_CREATE_REQUESTS_PER_MINUTE = old_rate
+                app.MAX_RUN_STORAGE_BYTES = old_storage
+                app.CREATE_RATE_WINDOWS.clear()
+
     def test_create_run_reaches_review_without_external_effects(self):
         with tempfile.TemporaryDirectory() as temp:
             old_runs = app.RUNS_ROOT

@@ -24,4 +24,8 @@ rejects non-loopback startup without the token and requires
 export routes.
 Never commit the token or include it in logs or public artifacts.
 Run IDs are path-constrained, artifact requests are containment-checked, and
-HTTP request bodies are capped at 2 MiB in the local MVP.
+HTTP request bodies are capped at 2 MiB in the local MVP. Run creation also
+uses bounded active-work, per-client rate, input-media, and retained-storage
+ceilings; exceeding a ceiling fails closed. Operators should set deliberate
+values for their hardware and retention policy rather than treating the
+defaults as a production capacity guarantee.
