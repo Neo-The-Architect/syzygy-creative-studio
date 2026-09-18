@@ -1,10 +1,10 @@
 {
   "evidence_version": "creative.runtime-verifier@1.0.0",
-  "started_at": "2026-09-18T10:31:54.384202+00:00",
+  "started_at": "2026-09-18T11:06:56.066096+00:00",
   "base_url": "http://127.0.0.1:8765",
   "external_effects": "DISABLED",
   "provider": "deterministic",
-  "run_id": "run-20260918T103154Z-2d7f88a8",
+  "run_id": "run-20260918T110656Z-73d237f4",
   "transitions": [
     "NEEDS_REVIEW",
     "APPROVED",
@@ -16,12 +16,12 @@
     "same_run_id": true
   },
   "render": {
-    "sha256": "50f89ad416b64c605552cb85b8a6e529dd207c305f8a88f2aa72c7ec417850ae",
-    "size_bytes": 2352742
+    "sha256": "26538414aacd17d9a4b3055cb7d00718b1a6b40ab53230813f5f746d414b9be4",
+    "size_bytes": 2352847
   },
   "export": {
-    "sha256": "dec1b0d579fcd98f679969f2ea02d5fa28694b85df592418c4bfb5488adcf217",
-    "size_bytes": 30172882,
+    "sha256": "f202238f4e41a90422eb2ebefc58bf2f7d318374a843e03c3fb1390a4edd381e",
+    "size_bytes": 30173059,
     "file_count": 332
   },
   "artifact_checks": [
@@ -53,15 +53,15 @@
       "path": "artifacts/hyperframes/reel.mp4",
       "get": 200,
       "head": 200,
-      "bytes": 2352742
+      "bytes": 2352847
     },
     {
-      "path": "artifacts/export/creative-run-run-20260918T103154Z-2d7f88a8.zip",
+      "path": "artifacts/export/creative-run-run-20260918T110656Z-73d237f4.zip",
       "get": 200,
       "head": 200,
-      "bytes": 30172882
+      "bytes": 30173059
     }
   ],
   "status": "PASS",
-  "completed_at": "2026-09-18T10:33:18.279049+00:00"
+  "completed_at": "2026-09-18T11:08:18.068429+00:00"
 }
