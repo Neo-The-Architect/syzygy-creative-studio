@@ -55,6 +55,47 @@ class CreativeStudioMvpTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             app.create_run({"prompt": ""}, run_id="run-test-003", run_checks=False)
 
+    def test_custom_source_is_bound_into_plan_and_composition(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            app.RUNS_ROOT = Path(temp) / "runs"
+            os.environ["SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES"] = "1"
+            try:
+                result = app.create_run(
+                    {
+                        "prompt": "Create a modern listing film.",
+                        "source": {
+                            "source_url": "local://approved-custom",
+                            "address": "42 Signal Street, Testville",
+                            "price": "$710,000",
+                            "beds": 4,
+                            "baths": 3,
+                            "area_sqft": 2400,
+                            "features": ["studio", "garden"],
+                            "description": "Synthetic custom fixture.",
+                        },
+                    },
+                    run_id="run-test-004",
+                    run_checks=True,
+                )
+                self.assertEqual(result["status"], "NEEDS_REVIEW")
+                plan = json.loads((app.RUNS_ROOT / "run-test-004" / "plan.json").read_text(encoding="utf-8"))
+                self.assertEqual(plan["source_facts"]["address"], "42 Signal Street, Testville")
+                composition = (app.RUNS_ROOT / "run-test-004" / "hyperframes" / "index.html").read_text(encoding="utf-8")
+                self.assertIn("42 Signal Street", composition)
+                self.assertIn("$710,000", composition)
+            finally:
+                app.RUNS_ROOT = old_runs
+                os.environ.pop("SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES", None)
+
+    def test_invalid_source_fails_closed(self):
+        with self.assertRaises(ValueError):
+            app.create_run(
+                {"prompt": "Reject incomplete source", "source": {"address": "missing facts"}},
+                run_id="run-test-005",
+                run_checks=False,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

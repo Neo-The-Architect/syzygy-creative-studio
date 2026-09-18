@@ -61,6 +61,46 @@ issues:
     activation_blocking: false
     evidence:
       - README.md
+  - id: ISSUE-0002
+    fingerprint: sha256:live-openrouter-route-not-qualified
+    severity: medium
+    status: open
+    round_found: assemble
+    activation_blocking: false
+    evidence:
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/1
+  - id: ISSUE-0003
+    fingerprint: sha256:hyperframes-render-export-not-wired
+    severity: medium
+    status: open
+    round_found: assemble
+    activation_blocking: false
+    evidence:
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/2
+  - id: ISSUE-0004
+    fingerprint: sha256:multi-output-adapters-not-implemented
+    severity: medium
+    status: open
+    round_found: assemble
+    activation_blocking: false
+    evidence:
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/3
+  - id: ISSUE-0005
+    fingerprint: sha256:syzygy-integration-deferred
+    severity: medium
+    status: open
+    round_found: assemble
+    activation_blocking: false
+    evidence:
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/4
+  - id: ISSUE-0006
+    fingerprint: sha256:external-publishing-adapters-disabled
+    severity: medium
+    status: open
+    round_found: assemble
+    activation_blocking: false
+    evidence:
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/5
 release:
   requested: false
   exact_commit: ""

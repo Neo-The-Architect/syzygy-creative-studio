@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import mimetypes
 import os
 import shutil
 import subprocess
@@ -19,6 +20,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 
 ROOT = Path(__file__).resolve().parent
@@ -78,6 +80,39 @@ def write_json(path: Path, value: Any) -> None:
 
 def fixture_property() -> dict[str, Any]:
     return read_json(FIXTURE_PROPERTY)
+
+
+def validate_source(source: dict[str, Any], pipeline: Any) -> dict[str, Any]:
+    if not isinstance(source, dict):
+        raise ValueError("source must be a JSON object")
+    try:
+        return pipeline.validate_property(source)
+    except Exception as exc:
+        raise ValueError(f"invalid source package: {exc}") from exc
+
+
+def build_creative_plan(prompt: str, source: dict[str, Any], output_targets: list[str], provider: str) -> dict[str, Any]:
+    return {
+        "schema_version": "creative.plan@1.1.0",
+        "brief": prompt,
+        "output_targets": output_targets,
+        "provider": provider,
+        "mode": "DETERMINISTIC_FIXTURE" if provider == "deterministic" else "OPENROUTER",
+        "source_facts": {
+            "address": source.get("address"),
+            "price": source.get("price"),
+            "beds": source.get("beds"),
+            "baths": source.get("baths"),
+            "area_sqft": source.get("area_sqft"),
+            "features": source.get("features", []),
+        },
+        "beats": [
+            {"id": "signal", "purpose": "establish the creative promise", "duration_seconds": 3},
+            {"id": "arrival", "purpose": "introduce the source subject", "duration_seconds": 4},
+            {"id": "details", "purpose": "show supported features", "duration_seconds": 6},
+            {"id": "handoff", "purpose": "present the review or CTA handoff", "duration_seconds": 4},
+        ],
+    }
 
 
 def import_pipeline() -> Any:
@@ -182,14 +217,14 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
         "created_at": utc_now(),
         "external_effects": "NOT_ATTEMPTED",
     }
-    source = payload.get("source") or fixture_property()
+    pipeline = import_pipeline()
+    source = validate_source(payload.get("source") or fixture_property(), pipeline)
     write_json(run_dir / "request.json", request)
     write_json(run_dir / "inputs" / "source.json", source)
     images_dir = run_dir / "inputs" / "images"
     shutil.copytree(FIXTURE_IMAGES, images_dir)
 
     artifacts_dir = run_dir / "artifacts"
-    pipeline = import_pipeline()
     pipeline_result = pipeline.run_pipeline(
         str(run_dir / "inputs" / "source.json"),
         str(images_dir),
@@ -205,13 +240,7 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
             "path": "inputs/source.json",
             "sha256": digest_file(run_dir / "inputs" / "source.json"),
         },
-        "plan": {
-            "brief": prompt,
-            "output_targets": output_targets,
-            "provider": provider,
-            "mode": "DETERMINISTIC_FIXTURE" if provider == "deterministic" else "OPENROUTER",
-            "schema_version": "creative.plan@1.0.0",
-        },
+        "plan": build_creative_plan(prompt, source, output_targets, provider),
         "pipeline": pipeline_result["audit"],
         "external_effects": "NOT_ATTEMPTED",
         "created_at": request["created_at"],
@@ -285,7 +314,8 @@ class StudioHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/" or self.path == "/index.html":
+        request_path = urlsplit(self.path).path
+        if request_path == "/" or request_path == "/index.html":
             body = (WEB_ROOT / "index.html").read_bytes()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -293,14 +323,29 @@ class StudioHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if self.path == "/api/health":
+        if request_path == "/api/health":
             self.send_json({"status": "PASS", "service": "syzygy-creative-studio", "external_effects": "DISABLED"})
             return
-        if self.path == "/api/runs":
+        if request_path == "/api/runs":
             self.send_json({"runs": list_runs()})
             return
-        if self.path.startswith("/api/runs/"):
-            run_id = self.path.removeprefix("/api/runs/").split("/", 1)[0]
+        if request_path.startswith("/api/runs/") and "/artifacts/" in request_path:
+            prefix, relative = request_path.split("/artifacts/", 1)
+            run_id = prefix.removeprefix("/api/runs/")
+            root = (RUNS_ROOT / run_id).resolve()
+            candidate = (root / unquote(relative)).resolve()
+            if not root.exists() or root not in candidate.parents or not candidate.is_file():
+                self.send_json({"error": "artifact not found"}, HTTPStatus.NOT_FOUND)
+                return
+            body = candidate.read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", mimetypes.guess_type(candidate.name)[0] or "application/octet-stream")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if request_path.startswith("/api/runs/"):
+            run_id = request_path.removeprefix("/api/runs/").split("/", 1)[0]
             path = RUNS_ROOT / run_id / "run.json"
             if path.exists():
                 self.send_json(read_json(path))
@@ -313,11 +358,12 @@ class StudioHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         try:
             payload = json.loads(self.rfile.read(length) or b"{}")
-            if self.path == "/api/runs":
+            request_path = urlsplit(self.path).path
+            if request_path == "/api/runs":
                 self.send_json(create_run(payload), HTTPStatus.CREATED)
                 return
-            if self.path.startswith("/api/runs/") and self.path.endswith("/approve"):
-                run_id = self.path.removeprefix("/api/runs/").removesuffix("/approve").strip("/")
+            if request_path.startswith("/api/runs/") and request_path.endswith("/approve"):
+                run_id = request_path.removeprefix("/api/runs/").removesuffix("/approve").strip("/")
                 self.send_json(approve_run(run_id))
                 return
             self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
