@@ -164,11 +164,14 @@ issues:
   - id: ISSUE-0010
     fingerprint: sha256:non-loopback-authentication-required
     severity: medium
-    status: open
+    status: resolved
     round_found: security
     activation_blocking: false
     evidence:
       - apps/creative-studio/app.py
+      - apps/creative-studio/tests/test_app.py
+      - commit:38befe8
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/actions/runs/35341947896
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/9
   - id: ISSUE-0011
     fingerprint: sha256:openrouter-transfer-before-approval
