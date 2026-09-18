@@ -1,7 +1,7 @@
 schema: 1
 project: syzygy-creative-studio
 target: public-mvp
-current_round: correctness
+current_round: security
 intelligence_pack:
   status: complete
   evidence:
@@ -24,10 +24,11 @@ rounds:
       - examples/rendered-run/run-summary.json
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/2
   correctness:
-    status: pending
+    status: complete
     evidence:
       - apps/creative-studio/tests/test_app.py
       - packages/real-estate-pipeline/tests/test_pipeline.py
+      - scripts/verify_local.py
       - examples/idempotency-run/run-summary.json
       - examples/exported-run/run-summary.json
       - examples/content-pack-run/run-summary.json
