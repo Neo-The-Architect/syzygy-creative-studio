@@ -161,6 +161,13 @@ issues:
       - apps/creative-studio/tests/test_app.py
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/8
       - Codex Security scan 78f456f7-1190-4b40-b3d7-a72833e2b442
+      - Codex Security scan 5b523bfb-48a9-4fe0-85ba-79572216aa09
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/13
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/14
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/15
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/16
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/17
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/18
   - id: ISSUE-0010
     fingerprint: sha256:non-loopback-authentication-required
     severity: medium
@@ -199,6 +206,78 @@ issues:
       - commit:856eec3050d44ea02615536fd68c6e67acf25cac
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/actions/runs/35344923015
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/11
+  - id: ISSUE-0013
+    fingerprint: sha256:provider-approval-identity-and-spend-policy
+    severity: medium
+    status: open
+    round_found: security
+    activation_blocking: false
+    evidence:
+      - apps/creative-studio/app.py
+      - packages/real-estate-pipeline/src/pipeline.py
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/12
+  - id: ISSUE-0014
+    fingerprint: sha256:cleartext-non-loopback-bearer-transport
+    severity: medium
+    status: open
+    round_found: security
+    activation_blocking: false
+    evidence:
+      - apps/creative-studio/app.py
+      - Codex Security scan 5b523bfb-48a9-4fe0-85ba-79572216aa09
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/13
+  - id: ISSUE-0015
+    fingerprint: sha256:non-atomic-run-state-transitions
+    severity: medium
+    status: open
+    round_found: security
+    activation_blocking: false
+    evidence:
+      - apps/creative-studio/app.py
+      - Codex Security scan 5b523bfb-48a9-4fe0-85ba-79572216aa09
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/14
+  - id: ISSUE-0016
+    fingerprint: sha256:hard-input-and-retained-storage-quotas
+    severity: medium
+    status: open
+    round_found: security
+    activation_blocking: false
+    evidence:
+      - apps/creative-studio/app.py
+      - packages/real-estate-pipeline/src/pipeline.py
+      - Codex Security scan 5b523bfb-48a9-4fe0-85ba-79572216aa09
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/15
+  - id: ISSUE-0017
+    fingerprint: sha256:symlink-artifact-containment
+    severity: medium
+    status: open
+    round_found: security
+    activation_blocking: false
+    evidence:
+      - apps/creative-studio/app.py
+      - Codex Security scan 5b523bfb-48a9-4fe0-85ba-79572216aa09
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/18
+  - id: ISSUE-0018
+    fingerprint: sha256:hyperframes-runtime-package-integrity
+    severity: medium
+    status: open
+    round_found: security
+    activation_blocking: false
+    evidence:
+      - apps/creative-studio/app.py
+      - packages/hyperframes-showcase/package.json
+      - Codex Security scan 5b523bfb-48a9-4fe0-85ba-79572216aa09
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/16
+  - id: ISSUE-0019
+    fingerprint: sha256:http-connection-and-read-admission
+    severity: medium
+    status: open
+    round_found: security
+    activation_blocking: false
+    evidence:
+      - apps/creative-studio/app.py
+      - Codex Security scan 5b523bfb-48a9-4fe0-85ba-79572216aa09
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/17
 release:
   requested: false
   exact_commit: ""
