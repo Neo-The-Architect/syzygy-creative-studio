@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest import mock
 from pathlib import Path
 
@@ -193,6 +194,27 @@ class CreativeStudioMvpTests(unittest.TestCase):
                 self.assertEqual(receipt["status"], "PASS")
                 self.assertEqual(receipt["size_bytes"], len(b"synthetic-mp4"))
                 self.assertTrue(receipt["sha256"])
+                exported = app.export_run("run-test-007")
+                self.assertEqual(exported["status"], "EXPORTED")
+                bundle_path = run_dir / "artifacts" / "export" / "creative-run-run-test-007.zip"
+                self.assertTrue(bundle_path.exists())
+                with zipfile.ZipFile(bundle_path) as bundle:
+                    self.assertIn("export-manifest.json", bundle.namelist())
+                    self.assertIn("inputs/source.json", bundle.namelist())
+                    self.assertIn("render-receipt.json", bundle.namelist())
+            finally:
+                app.RUNS_ROOT = old_runs
+                os.environ.pop("SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES", None)
+
+    def test_export_requires_rendered_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            app.RUNS_ROOT = Path(temp) / "runs"
+            os.environ["SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES"] = "1"
+            try:
+                app.create_run({"prompt": "Export gate"}, run_id="run-test-export-gate")
+                with self.assertRaisesRegex(ValueError, "requires RENDERED"):
+                    app.export_run("run-test-export-gate")
             finally:
                 app.RUNS_ROOT = old_runs
                 os.environ.pop("SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES", None)

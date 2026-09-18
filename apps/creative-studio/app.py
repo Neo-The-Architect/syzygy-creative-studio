@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import uuid
+import zipfile
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -562,6 +563,74 @@ def render_run(run_id: str, quality: str = "looks") -> dict[str, Any]:
     return run
 
 
+def export_run(run_id: str) -> dict[str, Any]:
+    """Package a rendered run and its evidence without performing an external effect."""
+    run_dir = RUNS_ROOT / run_id
+    path = run_dir / "run.json"
+    if not path.exists():
+        raise FileNotFoundError(run_id)
+    run = read_json(path)
+    if run.get("status") != "RENDERED":
+        raise ValueError(f"export requires RENDERED run: {run.get('status')}")
+
+    render_receipt_path = run_dir / "render-receipt.json"
+    render_receipt = read_json(render_receipt_path) if render_receipt_path.exists() else {}
+    render_path = run_dir / "artifacts" / "hyperframes" / "reel.mp4"
+    if render_receipt.get("status") != "PASS" or not render_path.is_file():
+        raise ValueError("export requires a PASS render receipt and rendered MP4")
+    if digest_file(render_path) != render_receipt.get("sha256"):
+        raise ValueError("export refused: rendered MP4 hash does not match receipt")
+
+    export_dir = run_dir / "artifacts" / "export"
+    export_dir.mkdir(parents=True, exist_ok=True)
+    output = export_dir / f"creative-run-{run_id}.zip"
+    files: list[dict[str, Any]] = []
+    for candidate in sorted(run_dir.rglob("*")):
+        if not candidate.is_file() or export_dir in candidate.parents:
+            continue
+        relative = candidate.relative_to(run_dir).as_posix()
+        files.append({"path": relative, "size_bytes": candidate.stat().st_size, "sha256": digest_file(candidate)})
+    manifest = {
+        "bundle_version": "creative.export@1.0.0",
+        "run_id": run_id,
+        "status": "RENDERED_AT_EXPORT",
+        "source_sha256": run.get("evidence", {}).get("source_sha256"),
+        "plan_sha256": run.get("evidence", {}).get("plan_sha256"),
+        "files": files,
+        "external_effects": "NOT_ATTEMPTED",
+    }
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+        bundle.writestr("export-manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+        for item in files:
+            bundle.write(run_dir / Path(item["path"]), item["path"])
+
+    receipt = {
+        "receipt_version": "creative.export@1.0.0",
+        "run_id": run_id,
+        "status": "PASS",
+        "output": f"artifacts/export/{output.name}",
+        "size_bytes": output.stat().st_size,
+        "sha256": digest_file(output),
+        "file_count": len(files),
+        "source_sha256": manifest["source_sha256"],
+        "plan_sha256": manifest["plan_sha256"],
+        "external_effects": "NOT_ATTEMPTED",
+        "completed_at": utc_now(),
+    }
+    write_json(run_dir / "export-receipt.json", receipt)
+    run["status"] = "EXPORTED"
+    run["export"] = {
+        "path": receipt["output"],
+        "receipt": "export-receipt.json",
+        "sha256": receipt["sha256"],
+        "size_bytes": receipt["size_bytes"],
+        "file_count": receipt["file_count"],
+    }
+    run["external_effects"] = "NOT_ATTEMPTED"
+    write_json(path, run)
+    return run
+
+
 class StudioHandler(BaseHTTPRequestHandler):
     server_version = "SyzygyCreativeStudio/0.1"
 
@@ -630,6 +699,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                 run_id = request_path.removeprefix("/api/runs/").removesuffix("/render").strip("/")
                 quality = str(payload.get("quality", "looks"))
                 self.send_json(render_run(run_id, quality=quality))
+                return
+            if request_path.startswith("/api/runs/") and request_path.endswith("/export"):
+                run_id = request_path.removeprefix("/api/runs/").removesuffix("/export").strip("/")
+                self.send_json(export_run(run_id))
                 return
             self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
         except FileNotFoundError as exc:

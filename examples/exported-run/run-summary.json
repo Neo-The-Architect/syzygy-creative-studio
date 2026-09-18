@@ -1,0 +1,13 @@
+{
+  "run_id": "run-20260918T083814Z-4ef29c35",
+  "before": "RENDERED",
+  "after": "EXPORTED",
+  "output_targets": ["video", "website", "presentation", "app"],
+  "bundle": {
+    "status": "PASS",
+    "file_count": 330,
+    "manifest_file_count": 330,
+    "boundary": "RENDERED_AT_EXPORT"
+  },
+  "external_effects": "NOT_ATTEMPTED"
+}

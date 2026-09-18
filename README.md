@@ -22,6 +22,7 @@ prompt + approved property fixture
   -> local review state
   -> explicit approval
   -> verified local MP4 render + receipt
+  -> local evidence/artifact export bundle
 ```
 
 The MVP does not publish to social platforms, send messages, mutate a CRM,
@@ -38,6 +39,11 @@ size, quality, and `ffprobe` metadata; a changed source or plan fails closed as
 Clients that may retry a request can include an `idempotency_key` in the run
 payload. The service stores a request fingerprint, returns the original run for
 an identical retry, and rejects reuse of that key for changed content.
+
+After a run reaches `RENDERED`, the operator can call
+`POST /api/runs/{run_id}/export` to create a local ZIP containing the source,
+plan, checks, receipts, generated artifacts, and a file-hash manifest. Export
+is a local handoff state (`EXPORTED`), not a publish or deployment action.
 
 ## Run the application
 

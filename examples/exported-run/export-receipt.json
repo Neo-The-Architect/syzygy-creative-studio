@@ -1,0 +1,11 @@
+{
+  "receipt_version": "creative.export@1.0.0",
+  "run_id": "run-20260918T083814Z-4ef29c35",
+  "status": "PASS",
+  "output": "artifacts/export/creative-run-run-20260918T083814Z-4ef29c35.zip",
+  "size_bytes": 26185314,
+  "sha256": "c7279e1570e2611caae6b08cf030f8002486f2d61cd42fef599789d72442f3e",
+  "file_count": 330,
+  "bundle_boundary": "RENDERED_AT_EXPORT",
+  "external_effects": "NOT_ATTEMPTED"
+}
