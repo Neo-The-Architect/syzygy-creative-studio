@@ -1,0 +1,56 @@
+{
+  "evidence_version": "creative.runtime-evidence@1.0.0",
+  "run_id": "run-20260918T093230Z-a034ce96",
+  "source": "synthetic runtime qualification fixture",
+  "request": {
+    "provider": "deterministic",
+    "output_targets": [
+      "video",
+      "website",
+      "presentation",
+      "app",
+      "content"
+    ],
+    "external_effects": "DISABLED"
+  },
+  "state_transitions": [
+    "NEEDS_REVIEW",
+    "APPROVED",
+    "RENDERED",
+    "EXPORTED"
+  ],
+  "hyperframes": {
+    "check": "PASS",
+    "snapshot": "PASS"
+  },
+  "render": {
+    "status": "PASS",
+    "path": "artifacts/hyperframes/reel.mp4",
+    "sha256": "ea11ea6b526a7f0f19eefb817f1a8c14d0d0a1956ae76ac7ac663916a06d3f37",
+    "size_bytes": 2336798
+  },
+  "export": {
+    "status": "PASS",
+    "path": "artifacts/export/creative-run-run-20260918T093230Z-a034ce96.zip",
+    "sha256": "eee3d423096d39eab3003f08a18a5c20a30d1a81b95f8c89814254c42b7b4a07",
+    "size_bytes": 28593608,
+    "file_count": 332
+  },
+  "idempotency_retry": {
+    "status": "PASS",
+    "same_run_id": true,
+    "returned_status": "EXPORTED"
+  },
+  "artifact_get_checks": {
+    "status": "PASS",
+    "routes": 4,
+    "http_status": 200
+  },
+  "non_blocking_observation": {
+    "status": "OPEN",
+    "issue": "https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/6",
+    "observation": "HEAD requests return HTTP 501 while GET artifact routes pass."
+  },
+  "qualification_boundary": "LOCAL_RUNTIME_SOURCE_TO_EXPORT",
+  "publishing": "DISABLED"
+}

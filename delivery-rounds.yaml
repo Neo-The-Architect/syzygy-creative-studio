@@ -120,6 +120,15 @@ issues:
     activation_blocking: false
     evidence:
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/5
+  - id: ISSUE-0007
+    fingerprint: sha256:local-http-head-method-unimplemented
+    severity: low
+    status: open
+    round_found: security
+    activation_blocking: false
+    evidence:
+      - examples/fresh-runtime-run/run-summary.json
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/6
 release:
   requested: false
   exact_commit: ""
