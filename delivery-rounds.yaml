@@ -40,6 +40,10 @@ rounds:
       - apps/creative-studio/app.py
       - apps/creative-studio/tests/test_app.py
       - examples/security-boundary-run/run-summary.json
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/8
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/9
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/10
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/11
   optimize:
     status: pending
     evidence: []
@@ -147,7 +151,7 @@ issues:
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/actions/runs/35333859622
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/7
   - id: ISSUE-0009
-    fingerprint: sha256:independent-security-scan-unavailable
+    fingerprint: sha256:independent-security-scan-complete-with-findings
     severity: medium
     status: open
     round_found: security
@@ -156,6 +160,36 @@ issues:
       - apps/creative-studio/app.py
       - apps/creative-studio/tests/test_app.py
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/8
+      - Codex Security scan 78f456f7-1190-4b40-b3d7-a72833e2b442
+  - id: ISSUE-0010
+    fingerprint: sha256:non-loopback-authentication-required
+    severity: medium
+    status: open
+    round_found: security
+    activation_blocking: false
+    evidence:
+      - apps/creative-studio/app.py
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/9
+  - id: ISSUE-0011
+    fingerprint: sha256:openrouter-transfer-before-approval
+    severity: medium
+    status: open
+    round_found: security
+    activation_blocking: false
+    evidence:
+      - apps/creative-studio/app.py
+      - packages/real-estate-pipeline/src/pipeline.py
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/10
+  - id: ISSUE-0012
+    fingerprint: sha256:run-concurrency-and-storage-quotas
+    severity: medium
+    status: open
+    round_found: security
+    activation_blocking: false
+    evidence:
+      - apps/creative-studio/app.py
+      - packages/real-estate-pipeline/src/pipeline.py
+      - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/11
 release:
   requested: false
   exact_commit: ""
