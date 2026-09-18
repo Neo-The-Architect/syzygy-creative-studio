@@ -91,6 +91,12 @@ Provider-specific image/video/audio adapters are intentionally separate from
 the core run state. A generated artifact is not automatically an approved or
 published artifact.
 
+The local UI exposes both provider routes. `deterministic fixture` is the
+offline default. Selecting `OpenRouter` requires `OPENROUTER_API_KEY` and
+`OPENROUTER_MODEL` to be configured in the process environment; missing
+configuration or malformed model output fails the run with a typed error and
+does not silently fall back to another model.
+
 ## Evidence boundary
 
 `IMPLEMENTED != TESTED != INTEGRATED != RUNTIME_VERIFIED != DEPLOYED != PRODUCTION_PROVEN`.

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from PIL import Image
@@ -14,7 +16,7 @@ SRC = ROOT / "src"
 sys.path.insert(0, str(SRC))
 
 from ingest import parse_listing_html  # noqa: E402
-from pipeline import build_claims, deterministic_copy, run_pipeline, validate_copy, validate_property  # noqa: E402
+from pipeline import PipelineError, build_claims, deterministic_copy, openrouter_copy, run_pipeline, validate_copy, validate_property  # noqa: E402
 
 
 class PipelineTests(unittest.TestCase):
@@ -48,6 +50,52 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(Path(result["campaign"]["assets"]["brochure"]).exists())
             self.assertGreater(Path(result["campaign"]["assets"]["reel"]).stat().st_size, 1000)
             self.assertGreater(Path(result["campaign"]["assets"]["brochure"]).stat().st_size, 1000)
+
+    def test_openrouter_requires_explicit_configuration(self) -> None:
+        record = json.loads((ROOT / "fixtures" / "property.json").read_text(encoding="utf-8"))
+        claims = build_claims(record)
+        with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "", "OPENROUTER_MODEL": ""}):
+            with self.assertRaisesRegex(PipelineError, "OPENROUTER_API_KEY and OPENROUTER_MODEL"):
+                openrouter_copy(record, claims)
+
+    def test_openrouter_accepts_strict_claim_bound_output(self) -> None:
+        record = json.loads((ROOT / "fixtures" / "property.json").read_text(encoding="utf-8"))
+        claims = build_claims(record)
+        generated = deterministic_copy(record, claims)
+        generated.pop("provider")
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = json.dumps(
+            {
+                "id": "req_test_123",
+                "choices": [{"message": {"content": json.dumps(generated)}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+            }
+        ).encode("utf-8")
+        response.headers = {"x-ratelimit-remaining": "9"}
+        with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key", "OPENROUTER_MODEL": "test/model"}):
+            with mock.patch("pipeline.urllib.request.urlopen", return_value=response):
+                result = openrouter_copy(record, claims)
+        self.assertEqual(result["provider"], "openrouter:test/model")
+        self.assertEqual(result["provider_metadata"]["request_id"], "req_test_123")
+        self.assertEqual(set(result["claim_ids"]), {claim["claim_id"] for claim in claims})
+
+    def test_openrouter_rejects_schema_drift_without_fallback(self) -> None:
+        record = json.loads((ROOT / "fixtures" / "property.json").read_text(encoding="utf-8"))
+        claims = build_claims(record)
+        generated = deterministic_copy(record, claims)
+        generated.pop("provider")
+        generated["unexpected"] = "must be rejected"
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = json.dumps(
+            {"choices": [{"message": {"content": json.dumps(generated)}}]}
+        ).encode("utf-8")
+        response.headers = {}
+        with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key", "OPENROUTER_MODEL": "test/model"}):
+            with mock.patch("pipeline.urllib.request.urlopen", return_value=response):
+                with self.assertRaisesRegex(PipelineError, "schema keys mismatch"):
+                    openrouter_copy(record, claims)
 
 
 if __name__ == "__main__":

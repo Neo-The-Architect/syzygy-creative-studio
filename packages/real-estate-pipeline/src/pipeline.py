@@ -8,7 +8,9 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.request
+from urllib.error import HTTPError, URLError
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -191,17 +193,59 @@ def openrouter_copy(record: dict[str, Any], claims: list[dict[str, Any]]) -> dic
         },
         method="POST",
     )
+    started = time.perf_counter()
     try:
         with urllib.request.urlopen(request, timeout=90) as response:
             payload = json.loads(response.read().decode("utf-8"))
+            response_headers = {key.lower(): value for key, value in response.headers.items()}
+    except HTTPError as exc:
+        raise PipelineError(f"OpenRouter request failed: HTTP {exc.code}") from exc
+    except URLError as exc:
+        raise PipelineError(f"OpenRouter request failed: {exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise PipelineError("OpenRouter returned invalid JSON") from exc
+    except Exception as exc:  # provider failure is a typed pipeline failure
+        raise PipelineError(f"OpenRouter request failed: {exc}") from exc
+
+    try:
         content = payload["choices"][0]["message"]["content"]
         if isinstance(content, list):
             content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("response content is empty or not text")
         result = json.loads(content)
-    except Exception as exc:  # provider failure is a typed pipeline failure
-        raise PipelineError(f"OpenRouter generation failed: {exc}") from exc
+    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise PipelineError(f"OpenRouter generation failed: malformed structured output ({exc})") from exc
+
+    if not isinstance(result, dict):
+        raise PipelineError("OpenRouter generation failed: structured output is not an object")
+    expected_keys = {
+        "title", "description", "social_caption", "email_subject",
+        "video_script", "cta", "alt_text", "claim_ids",
+    }
+    if set(result) != expected_keys:
+        unexpected = sorted(set(result) - expected_keys)
+        missing = sorted(expected_keys - set(result))
+        raise PipelineError(f"OpenRouter generation failed: schema keys mismatch; missing={missing}, unexpected={unexpected}")
+    expected_claim_ids = {claim["claim_id"] for claim in claims}
+    claim_ids = result.get("claim_ids")
+    if not isinstance(claim_ids, list) or not all(isinstance(item, str) for item in claim_ids):
+        raise PipelineError("OpenRouter generation failed: claim_ids must be a string array")
+    if set(claim_ids) != expected_claim_ids or len(claim_ids) != len(expected_claim_ids):
+        raise PipelineError("OpenRouter generation failed: claim_ids must exactly bind the supplied claims")
     result["provider"] = f"openrouter:{model}"
-    result["claim_ids"] = result.get("claim_ids") if isinstance(result.get("claim_ids"), list) else [claim["claim_id"] for claim in claims]
+    result["provider_metadata"] = {
+        "provider": "openrouter",
+        "model": model,
+        "request_id": payload.get("id"),
+        "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+        "usage": payload.get("usage"),
+        "response_headers": {
+            key: value
+            for key, value in response_headers.items()
+            if key in {"x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset"}
+        },
+    }
     return result
 
 
@@ -211,9 +255,14 @@ def validate_copy(copy: dict[str, Any], claims: list[dict[str, Any]]) -> None:
     if missing:
         raise PipelineError(f"generated copy missing fields: {', '.join(missing)}")
     claim_ids = {claim["claim_id"] for claim in claims}
-    unknown = set(copy.get("claim_ids", [])) - claim_ids
+    generated_claim_ids = copy.get("claim_ids")
+    if not isinstance(generated_claim_ids, list) or not all(isinstance(item, str) for item in generated_claim_ids):
+        raise PipelineError("generated copy claim_ids must be a string array")
+    unknown = set(generated_claim_ids) - claim_ids
     if unknown:
         raise PipelineError(f"generated copy references unknown claims: {sorted(unknown)}")
+    if set(generated_claim_ids) != claim_ids or len(generated_claim_ids) != len(claim_ids):
+        raise PipelineError("generated copy must bind every supported claim exactly once")
     blocked_terms = ["best school", "safe neighborhood", "perfect for families", "guaranteed"]
     text = json.dumps(copy).lower()
     if any(term in text for term in blocked_terms):
@@ -336,6 +385,7 @@ def run_pipeline(property_path: str, images_dir: str, out_dir: str, provider: st
         "status": "PASS",
         "boundary": "LOCAL_GENERATION_AND_RENDER",
         "provider": copy.get("provider"),
+        "provider_metadata": copy.get("provider_metadata"),
         "claims_supported": len(claims),
         "selected_images": len(selected),
         "outputs_exist": {key: Path(path).exists() for key, path in assets.items()},

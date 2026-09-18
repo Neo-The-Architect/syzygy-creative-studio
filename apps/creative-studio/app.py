@@ -562,7 +562,7 @@ class StudioHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
         except FileNotFoundError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
-        except (ValueError, json.JSONDecodeError, subprocess.SubprocessError) as exc:
+        except (ValueError, json.JSONDecodeError, subprocess.SubprocessError, RuntimeError) as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         except Exception as exc:  # defensive boundary for the local service
             self.send_json({"error": f"internal error: {exc}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
