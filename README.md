@@ -74,6 +74,18 @@ Run one complete deterministic fixture:
 python apps/creative-studio/app.py --once
 ```
 
+Run the bounded local qualification checks:
+
+```powershell
+python scripts/verify_local.py
+```
+
+The verifier runs compilation, both focused test suites, recorded-evidence
+presence checks, and an optional loopback health check. A stopped local service
+is reported as `SKIP` by default; use `--require-health` when the persistent
+service itself is part of the acceptance boundary. The verifier never calls
+external providers or publishing APIs.
+
 ## Run tests
 
 ```powershell
