@@ -37,6 +37,56 @@ class CreativeStudioMvpTests(unittest.TestCase):
                 if old_model is not None:
                     os.environ["OPENROUTER_MODEL"] = old_model
 
+    def test_openrouter_provider_binds_plan_into_run_record(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            app.RUNS_ROOT = Path(temp) / "runs"
+            pipeline = app.import_pipeline()
+            source = app.fixture_property()
+            claims = pipeline.build_claims(source)
+            generated_plan = {
+                "creative_direction": "A restrained editorial property film.",
+                "beats": [
+                    {
+                        "id": "arrival",
+                        "purpose": "introduce the verified source",
+                        "duration_seconds": 8,
+                        "claim_ids": [claim["claim_id"] for claim in claims],
+                    }
+                ],
+                "claim_ids": [claim["claim_id"] for claim in claims],
+                "provider_metadata": {"provider": "openrouter", "model": "test/model", "request_id": "plan_123"},
+            }
+            fake_pipeline_result = {
+                "audit": {"status": "PASS", "provider": "openrouter:test/model"},
+                "campaign": {"claims": claims, "copy": {"provider": "openrouter:test/model"}},
+            }
+            old_key = os.environ.get("OPENROUTER_API_KEY")
+            old_model = os.environ.get("OPENROUTER_MODEL")
+            os.environ["OPENROUTER_API_KEY"] = "test-key"
+            os.environ["OPENROUTER_MODEL"] = "test/model"
+            try:
+                with mock.patch.object(pipeline, "openrouter_creative_plan", return_value=generated_plan):
+                    with mock.patch.object(pipeline, "run_pipeline", return_value=fake_pipeline_result):
+                        result = app.create_run(
+                            {"prompt": "Use the live planning route", "provider": "openrouter"},
+                            run_id="run-openrouter-plan",
+                            run_checks=False,
+                        )
+                self.assertEqual(result["plan"]["provider"], "openrouter")
+                self.assertEqual(result["plan"]["creative_direction"], generated_plan["creative_direction"])
+                self.assertEqual(result["plan"]["provider_metadata"]["request_id"], "plan_123")
+            finally:
+                app.RUNS_ROOT = old_runs
+                if old_key is None:
+                    os.environ.pop("OPENROUTER_API_KEY", None)
+                else:
+                    os.environ["OPENROUTER_API_KEY"] = old_key
+                if old_model is None:
+                    os.environ.pop("OPENROUTER_MODEL", None)
+                else:
+                    os.environ["OPENROUTER_MODEL"] = old_model
+
     def test_head_routes_return_headers_without_body_and_preserve_containment(self):
         with tempfile.TemporaryDirectory() as temp:
             old_runs = app.RUNS_ROOT

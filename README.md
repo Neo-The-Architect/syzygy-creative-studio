@@ -152,6 +152,14 @@ offline default. Selecting `OpenRouter` requires `OPENROUTER_API_KEY` and
 configuration or malformed model output fails the run with a typed error and
 does not silently fall back to another model.
 
+An OpenRouter run performs two source-bound structured calls: a creative-plan
+call that returns a creative direction and claim-bound beats, followed by the
+campaign-copy call. Both responses are schema-checked locally. The resulting
+provider/model/request metadata is retained in the local run evidence, while
+credentials and full provider payloads are never written to public artifacts.
+The plan and copy calls have no render, approval, or publishing authority; the
+same explicit review and export gates apply to every provider.
+
 ## Evidence boundary
 
 `IMPLEMENTED != TESTED != INTEGRATED != RUNTIME_VERIFIED != DEPLOYED != PRODUCTION_PROVEN`.

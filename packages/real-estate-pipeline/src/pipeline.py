@@ -249,6 +249,184 @@ def openrouter_copy(record: dict[str, Any], claims: list[dict[str, Any]]) -> dic
     return result
 
 
+def openrouter_creative_plan(
+    prompt: str,
+    record: dict[str, Any],
+    claims: list[dict[str, Any]],
+    output_targets: list[str],
+) -> dict[str, Any]:
+    """Generate a strict, source-bound creative plan through OpenRouter.
+
+    The application keeps the provider boundary explicit: this function only
+    returns a validated plan and provider metadata. It never renders, writes,
+    publishes, or approves an artifact.
+    """
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    model = os.environ.get("OPENROUTER_MODEL")
+    if not api_key or not model:
+        raise PipelineError("OPENROUTER_API_KEY and OPENROUTER_MODEL are required for provider=openrouter")
+
+    expected_claim_ids = {claim["claim_id"] for claim in claims}
+    sanitized = {
+        "brief": prompt,
+        "output_targets": output_targets,
+        "property": {
+            "address": record["address"],
+            "price": record["price"],
+            "beds": record["beds"],
+            "baths": record["baths"],
+            "area_sqft": record["area_sqft"],
+            "features": record["features"],
+            "claims": claims,
+        },
+    }
+    output_schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "creative_direction": {"type": "string"},
+            "beats": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 12,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "id": {"type": "string"},
+                        "purpose": {"type": "string"},
+                        "duration_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 60},
+                        "claim_ids": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": ["id", "purpose", "duration_seconds", "claim_ids"],
+                },
+            },
+            "claim_ids": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["creative_direction", "beats", "claim_ids"],
+    }
+    instruction = {
+        "role": "You are an evidence-grounded real-estate creative director.",
+        "task": "Create a cinematic, production-oriented plan from only the supplied supported claims.",
+        "constraints": [
+            "Do not invent, infer, or embellish property facts.",
+            "Do not mention protected classes, schools, safety, crime, or neighborhood steering.",
+            "Use every supported claim exactly once at the top level and at least once across the beats.",
+            "Return JSON only and follow the schema exactly.",
+        ],
+        "property": sanitized,
+    }
+    body = json.dumps(
+        {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": instruction["role"]},
+                {"role": "user", "content": json.dumps(instruction)},
+            ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "real_estate_creative_plan",
+                    "strict": True,
+                    "schema": output_schema,
+                },
+            },
+            "temperature": 0.2,
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "http://localhost/syzygy-creative-studio",
+            "X-Title": "Syzygy Creative Studio",
+        },
+        method="POST",
+    )
+    started = time.perf_counter()
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            response_headers = {key.lower(): value for key, value in response.headers.items()}
+    except HTTPError as exc:
+        raise PipelineError(f"OpenRouter creative plan request failed: HTTP {exc.code}") from exc
+    except URLError as exc:
+        raise PipelineError(f"OpenRouter creative plan request failed: {exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise PipelineError("OpenRouter creative plan returned invalid JSON") from exc
+    except Exception as exc:
+        raise PipelineError(f"OpenRouter creative plan request failed: {exc}") from exc
+
+    try:
+        content = payload["choices"][0]["message"]["content"]
+        if isinstance(content, list):
+            content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("response content is empty or not text")
+        result = json.loads(content)
+    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise PipelineError(f"OpenRouter creative plan failed: malformed structured output ({exc})") from exc
+
+    if not isinstance(result, dict):
+        raise PipelineError("OpenRouter creative plan failed: structured output is not an object")
+    expected_keys = {"creative_direction", "beats", "claim_ids"}
+    if set(result) != expected_keys:
+        unexpected = sorted(set(result) - expected_keys)
+        missing = sorted(expected_keys - set(result))
+        raise PipelineError(f"OpenRouter creative plan failed: schema keys mismatch; missing={missing}, unexpected={unexpected}")
+    if not isinstance(result["creative_direction"], str) or not result["creative_direction"].strip():
+        raise PipelineError("OpenRouter creative plan failed: creative_direction must be non-empty text")
+    claim_ids = result["claim_ids"]
+    if not isinstance(claim_ids, list) or not all(isinstance(item, str) for item in claim_ids):
+        raise PipelineError("OpenRouter creative plan failed: claim_ids must be a string array")
+    if set(claim_ids) != expected_claim_ids or len(claim_ids) != len(expected_claim_ids):
+        raise PipelineError("OpenRouter creative plan failed: claim_ids must exactly bind the supplied claims")
+    beats = result["beats"]
+    if not isinstance(beats, list) or not beats or len(beats) > 12:
+        raise PipelineError("OpenRouter creative plan failed: beats must contain 1 to 12 items")
+    beat_ids: set[str] = set()
+    covered_claim_ids: set[str] = set()
+    for beat in beats:
+        if not isinstance(beat, dict) or set(beat) != {"id", "purpose", "duration_seconds", "claim_ids"}:
+            raise PipelineError("OpenRouter creative plan failed: beat schema mismatch")
+        beat_id = beat["id"]
+        purpose = beat["purpose"]
+        duration = beat["duration_seconds"]
+        beat_claim_ids = beat["claim_ids"]
+        if not isinstance(beat_id, str) or not beat_id.strip() or beat_id in beat_ids:
+            raise PipelineError("OpenRouter creative plan failed: beat ids must be unique non-empty strings")
+        if not isinstance(purpose, str) or not purpose.strip():
+            raise PipelineError("OpenRouter creative plan failed: beat purpose must be non-empty text")
+        if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration <= 0 or duration > 60:
+            raise PipelineError("OpenRouter creative plan failed: beat duration must be between 0 and 60 seconds")
+        if not isinstance(beat_claim_ids, list) or not all(isinstance(item, str) for item in beat_claim_ids):
+            raise PipelineError("OpenRouter creative plan failed: beat claim_ids must be a string array")
+        if len(beat_claim_ids) != len(set(beat_claim_ids)) or not set(beat_claim_ids) <= expected_claim_ids:
+            raise PipelineError("OpenRouter creative plan failed: beats reference unknown or duplicate claims")
+        beat_ids.add(beat_id)
+        covered_claim_ids.update(beat_claim_ids)
+    if covered_claim_ids != expected_claim_ids:
+        raise PipelineError("OpenRouter creative plan failed: beats must cover every supplied claim")
+    blocked_terms = ["best school", "safe neighborhood", "perfect for families", "guaranteed"]
+    if any(term in json.dumps(result).lower() for term in blocked_terms):
+        raise PipelineError("OpenRouter creative plan failed: output contains a blocked or unsupported claim")
+    result["provider_metadata"] = {
+        "provider": "openrouter",
+        "model": model,
+        "request_id": payload.get("id"),
+        "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+        "usage": payload.get("usage"),
+        "response_headers": {
+            key: value
+            for key, value in response_headers.items()
+            if key in {"x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset"}
+        },
+    }
+    return result
+
+
 def validate_copy(copy: dict[str, Any], claims: list[dict[str, Any]]) -> None:
     required = ["title", "description", "social_caption", "email_subject", "video_script", "cta", "alt_text"]
     missing = [key for key in required if not copy.get(key)]

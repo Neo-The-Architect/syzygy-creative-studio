@@ -133,8 +133,15 @@ def validate_source(source: dict[str, Any], pipeline: Any) -> dict[str, Any]:
         raise ValueError(f"invalid source package: {exc}") from exc
 
 
-def build_creative_plan(prompt: str, source: dict[str, Any], output_targets: list[str], provider: str) -> dict[str, Any]:
-    return {
+def build_creative_plan(
+    prompt: str,
+    source: dict[str, Any],
+    output_targets: list[str],
+    provider: str,
+    pipeline: Any | None = None,
+    claims: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    plan = {
         "schema_version": "creative.plan@1.1.0",
         "brief": prompt,
         "output_targets": output_targets,
@@ -155,6 +162,20 @@ def build_creative_plan(prompt: str, source: dict[str, Any], output_targets: lis
             {"id": "handoff", "purpose": "present the review or CTA handoff", "duration_seconds": 4},
         ],
     }
+    if provider == "openrouter":
+        if pipeline is None:
+            raise ValueError("pipeline is required for provider=openrouter creative planning")
+        bound_claims = claims if claims is not None else pipeline.build_claims(source)
+        generated = pipeline.openrouter_creative_plan(prompt, source, bound_claims, output_targets)
+        plan.update(
+            {
+                "creative_direction": generated["creative_direction"],
+                "beats": generated["beats"],
+                "claim_ids": generated["claim_ids"],
+                "provider_metadata": generated["provider_metadata"],
+            }
+        )
+    return plan
 
 
 def validate_provider_configuration(provider: str) -> None:
@@ -489,6 +510,8 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
     images_dir = run_dir / "inputs" / "images"
     shutil.copytree(FIXTURE_IMAGES, images_dir)
 
+    claims = pipeline.build_claims(source)
+    creative_plan = build_creative_plan(prompt, source, output_targets, provider, pipeline, claims)
     artifacts_dir = run_dir / "artifacts"
     pipeline_result = pipeline.run_pipeline(
         str(run_dir / "inputs" / "source.json"),
@@ -505,7 +528,7 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
             "path": "inputs/source.json",
             "sha256": digest_file(run_dir / "inputs" / "source.json"),
         },
-        "plan": build_creative_plan(prompt, source, output_targets, provider),
+        "plan": creative_plan,
         "pipeline": pipeline_result["audit"],
         "external_effects": "NOT_ATTEMPTED",
         "created_at": request["created_at"],

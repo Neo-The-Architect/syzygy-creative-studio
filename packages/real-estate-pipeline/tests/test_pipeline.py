@@ -16,7 +16,7 @@ SRC = ROOT / "src"
 sys.path.insert(0, str(SRC))
 
 from ingest import parse_listing_html  # noqa: E402
-from pipeline import PipelineError, build_claims, deterministic_copy, openrouter_copy, run_pipeline, validate_copy, validate_property  # noqa: E402
+from pipeline import PipelineError, build_claims, deterministic_copy, openrouter_copy, openrouter_creative_plan, run_pipeline, validate_copy, validate_property  # noqa: E402
 
 
 class PipelineTests(unittest.TestCase):
@@ -96,6 +96,71 @@ class PipelineTests(unittest.TestCase):
             with mock.patch("pipeline.urllib.request.urlopen", return_value=response):
                 with self.assertRaisesRegex(PipelineError, "schema keys mismatch"):
                     openrouter_copy(record, claims)
+
+    def test_openrouter_creative_plan_accepts_claim_bound_beats(self) -> None:
+        record = json.loads((ROOT / "fixtures" / "property.json").read_text(encoding="utf-8"))
+        claims = build_claims(record)
+        claim_ids = [claim["claim_id"] for claim in claims]
+        generated = {
+            "creative_direction": "A calm, editorial arrival that lets the supported details lead.",
+            "beats": [
+                {
+                    "id": "arrival",
+                    "purpose": "establish the property and its verified proposition",
+                    "duration_seconds": 8,
+                    "claim_ids": claim_ids,
+                }
+            ],
+            "claim_ids": claim_ids,
+        }
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = json.dumps(
+            {
+                "id": "plan_test_123",
+                "choices": [{"message": {"content": json.dumps(generated)}}],
+                "usage": {"prompt_tokens": 20, "completion_tokens": 30},
+            }
+        ).encode("utf-8")
+        response.headers = {"x-ratelimit-remaining": "8"}
+        with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key", "OPENROUTER_MODEL": "test/model"}):
+            with mock.patch("pipeline.urllib.request.urlopen", return_value=response):
+                result = openrouter_creative_plan(
+                    "Create a cinematic property showcase.",
+                    record,
+                    claims,
+                    ["video", "website"],
+                )
+        self.assertEqual(result["creative_direction"].startswith("A calm"), True)
+        self.assertEqual(result["provider_metadata"]["request_id"], "plan_test_123")
+        self.assertEqual(set(result["claim_ids"]), set(claim_ids))
+
+    def test_openrouter_creative_plan_rejects_unbound_claims(self) -> None:
+        record = json.loads((ROOT / "fixtures" / "property.json").read_text(encoding="utf-8"))
+        claims = build_claims(record)
+        claim_ids = [claim["claim_id"] for claim in claims]
+        generated = {
+            "creative_direction": "Unsupported direction",
+            "beats": [
+                {
+                    "id": "arrival",
+                    "purpose": "make an unsupported claim",
+                    "duration_seconds": 8,
+                    "claim_ids": ["claim-unknown"],
+                }
+            ],
+            "claim_ids": claim_ids,
+        }
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = json.dumps(
+            {"choices": [{"message": {"content": json.dumps(generated)}}]}
+        ).encode("utf-8")
+        response.headers = {}
+        with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key", "OPENROUTER_MODEL": "test/model"}):
+            with mock.patch("pipeline.urllib.request.urlopen", return_value=response):
+                with self.assertRaisesRegex(PipelineError, "unknown or duplicate claims"):
+                    openrouter_creative_plan("Reject unsupported plan", record, claims, ["video"])
 
 
 if __name__ == "__main__":
