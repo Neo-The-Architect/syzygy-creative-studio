@@ -1,0 +1,36 @@
+name: Verify local-first MVP
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: packages/real-estate-pipeline/requirements.txt
+
+      - name: Install declared pipeline dependency
+        run: python -m pip install -r packages/real-estate-pipeline/requirements.txt
+
+      - name: Compile application and pipeline
+        run: python -m py_compile apps/creative-studio/app.py packages/real-estate-pipeline/src/pipeline.py scripts/verify_local.py
+
+      - name: Run Creative Studio tests
+        run: python -m unittest discover -s apps/creative-studio/tests -v
+
+      - name: Run property pipeline tests
+        run: python -m unittest discover -s packages/real-estate-pipeline/tests -v

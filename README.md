@@ -97,6 +97,11 @@ is reported as `SKIP` by default; use `--require-health` when the persistent
 service itself is part of the acceptance boundary. The verifier never calls
 external providers or publishing APIs.
 
+Every push to `main` and every pull request also runs the focused source
+verification workflow in `.github/workflows/verify.yml`. The workflow installs
+the declared pipeline dependency, compiles the application, and runs both
+focused test suites with external effects disabled.
+
 ## Run tests
 
 ```powershell
