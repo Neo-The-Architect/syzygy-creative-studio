@@ -2,7 +2,10 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import unittest
+import urllib.error
+import urllib.request
 import zipfile
 from unittest import mock
 from pathlib import Path
@@ -13,6 +16,52 @@ import app  # noqa: E402
 
 
 class CreativeStudioMvpTests(unittest.TestCase):
+    def test_head_routes_return_headers_without_body_and_preserve_containment(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            app.RUNS_ROOT = Path(temp) / "runs"
+            run_dir = app.RUNS_ROOT / "head-test"
+            artifact = run_dir / "artifacts" / "sample.txt"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_text("head-safe\n", encoding="utf-8")
+            app.write_json(run_dir / "run.json", {"run_id": "head-test", "status": "NEEDS_REVIEW"})
+            server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.StudioHandler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_address[1]}"
+            try:
+                for path, expected_type, expected_length in [
+                    ("/api/health", "application/json; charset=utf-8", None),
+                    ("/api/runs/head-test", "application/json; charset=utf-8", None),
+                    ("/api/runs/head-test/artifacts/artifacts/sample.txt", "text/plain", artifact.stat().st_size),
+                ]:
+                    request = urllib.request.Request(base + path, method="HEAD")
+                    with urllib.request.urlopen(request, timeout=5) as response:
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(response.read(), b"")
+                        self.assertEqual(response.headers["Content-Type"], expected_type)
+                        if expected_length is not None:
+                            self.assertEqual(int(response.headers["Content-Length"]), expected_length)
+
+                with self.assertRaises(urllib.error.HTTPError) as missing:
+                    urllib.request.urlopen(
+                        urllib.request.Request(base + "/api/runs/head-test/artifacts/artifacts/missing.txt", method="HEAD"),
+                        timeout=5,
+                    )
+                self.assertEqual(missing.exception.code, 404)
+
+                with self.assertRaises(urllib.error.HTTPError) as traversal:
+                    urllib.request.urlopen(
+                        urllib.request.Request(base + "/api/runs/head-test/artifacts/%2e%2e/%2e%2e/%2e%2e/run.json", method="HEAD"),
+                        timeout=5,
+                    )
+                self.assertEqual(traversal.exception.code, 404)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
+                app.RUNS_ROOT = old_runs
+
     def test_create_run_reaches_review_without_external_effects(self):
         with tempfile.TemporaryDirectory() as temp:
             old_runs = app.RUNS_ROOT

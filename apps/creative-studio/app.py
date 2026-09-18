@@ -703,7 +703,7 @@ def export_run(run_id: str) -> dict[str, Any]:
 class StudioHandler(BaseHTTPRequestHandler):
     server_version = "SyzygyCreativeStudio/0.1"
 
-    def send_json(self, value: Any, status: int = HTTPStatus.OK) -> None:
+    def send_json(self, value: Any, status: int = HTTPStatus.OK, head_only: bool = False) -> None:
         body = json.dumps(value, indent=2, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -711,7 +711,54 @@ class StudioHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        if not head_only:
+            self.wfile.write(body)
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        """Return GET-equivalent headers without reading or sending a body."""
+        request_path = urlsplit(self.path).path
+        if request_path == "/" or request_path == "/index.html":
+            body = (WEB_ROOT / "index.html").read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            return
+        if request_path == "/api/health":
+            self.send_json({"status": "PASS", "service": "syzygy-creative-studio", "external_effects": "DISABLED"}, head_only=True)
+            return
+        if request_path.startswith("/api/runs/") and "/artifacts/" in request_path:
+            prefix, relative = request_path.split("/artifacts/", 1)
+            run_id = unquote(prefix.removeprefix("/api/runs/"))
+            if not is_safe_run_id(run_id):
+                self.send_json({"error": "artifact not found"}, HTTPStatus.NOT_FOUND, head_only=True)
+                return
+            root = (RUNS_ROOT / run_id).resolve()
+            candidate = (root / unquote(relative)).resolve()
+            if not root.exists() or root not in candidate.parents or not candidate.is_file():
+                self.send_json({"error": "artifact not found"}, HTTPStatus.NOT_FOUND, head_only=True)
+                return
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", mimetypes.guess_type(candidate.name)[0] or "application/octet-stream")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(candidate.stat().st_size))
+            self.end_headers()
+            return
+        if request_path.startswith("/api/runs/"):
+            run_id = unquote(request_path.removeprefix("/api/runs/").split("/", 1)[0])
+            if not is_safe_run_id(run_id):
+                self.send_json({"error": "run not found"}, HTTPStatus.NOT_FOUND, head_only=True)
+                return
+            path = RUNS_ROOT / run_id / "run.json"
+            if path.exists():
+                self.send_json(read_json(path), head_only=True)
+            else:
+                self.send_json({"error": "run not found"}, HTTPStatus.NOT_FOUND, head_only=True)
+            return
+        self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND, head_only=True)
 
     def do_GET(self) -> None:  # noqa: N802
         request_path = urlsplit(self.path).path

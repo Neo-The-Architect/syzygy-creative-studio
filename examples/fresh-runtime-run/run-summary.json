@@ -46,10 +46,17 @@
     "routes": 4,
     "http_status": 200
   },
+  "head_qualification": {
+    "status": "PASS",
+    "health_status": 200,
+    "artifact_status": 200,
+    "body_bytes": 0,
+    "containment_rejection": 404
+  },
   "non_blocking_observation": {
-    "status": "OPEN",
+    "status": "RESOLVED",
     "issue": "https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/6",
-    "observation": "HEAD requests return HTTP 501 while GET artifact routes pass."
+    "observation": "HEAD requests returned HTTP 501 before the bounded handler was added; the repair now returns bodyless GET-equivalent headers."
   },
   "qualification_boundary": "LOCAL_RUNTIME_SOURCE_TO_EXPORT",
   "publishing": "DISABLED"

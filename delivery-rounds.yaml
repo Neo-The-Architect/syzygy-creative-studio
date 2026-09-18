@@ -123,10 +123,12 @@ issues:
   - id: ISSUE-0007
     fingerprint: sha256:local-http-head-method-unimplemented
     severity: low
-    status: open
+    status: resolved
     round_found: security
     activation_blocking: false
     evidence:
+      - apps/creative-studio/app.py
+      - apps/creative-studio/tests/test_app.py
       - examples/fresh-runtime-run/run-summary.json
       - https://github.com/Neo-The-Architect/syzygy-creative-studio/issues/6
 release:
