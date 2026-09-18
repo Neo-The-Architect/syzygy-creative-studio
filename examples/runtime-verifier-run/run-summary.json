@@ -1,0 +1,67 @@
+{
+  "evidence_version": "creative.runtime-verifier@1.0.0",
+  "started_at": "2026-09-18T10:31:54.384202+00:00",
+  "base_url": "http://127.0.0.1:8765",
+  "external_effects": "DISABLED",
+  "provider": "deterministic",
+  "run_id": "run-20260918T103154Z-2d7f88a8",
+  "transitions": [
+    "NEEDS_REVIEW",
+    "APPROVED",
+    "RENDERED",
+    "EXPORTED"
+  ],
+  "idempotency_retry": {
+    "status": "PASS",
+    "same_run_id": true
+  },
+  "render": {
+    "sha256": "50f89ad416b64c605552cb85b8a6e529dd207c305f8a88f2aa72c7ec417850ae",
+    "size_bytes": 2352742
+  },
+  "export": {
+    "sha256": "dec1b0d579fcd98f679969f2ea02d5fa28694b85df592418c4bfb5488adcf217",
+    "size_bytes": 30172882,
+    "file_count": 332
+  },
+  "artifact_checks": [
+    {
+      "path": "artifacts/website/index.html",
+      "get": 200,
+      "head": 200,
+      "bytes": 1338
+    },
+    {
+      "path": "artifacts/presentation/index.html",
+      "get": 200,
+      "head": 200,
+      "bytes": 1731
+    },
+    {
+      "path": "artifacts/app/index.html",
+      "get": 200,
+      "head": 200,
+      "bytes": 2361
+    },
+    {
+      "path": "artifacts/content/content-pack.json",
+      "get": 200,
+      "head": 200,
+      "bytes": 1795
+    },
+    {
+      "path": "artifacts/hyperframes/reel.mp4",
+      "get": 200,
+      "head": 200,
+      "bytes": 2352742
+    },
+    {
+      "path": "artifacts/export/creative-run-run-20260918T103154Z-2d7f88a8.zip",
+      "get": 200,
+      "head": 200,
+      "bytes": 30172882
+    }
+  ],
+  "status": "PASS",
+  "completed_at": "2026-09-18T10:33:18.279049+00:00"
+}

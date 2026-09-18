@@ -97,6 +97,17 @@ is reported as `SKIP` by default; use `--require-health` when the persistent
 service itself is part of the acceptance boundary. The verifier never calls
 external providers or publishing APIs.
 
+Exercise the complete live local HTTP lifecycle, including creation,
+idempotent retry, approval, HyperFrames render, export, and artifact GET/HEAD
+checks:
+
+```powershell
+python scripts/verify_runtime.py --output work/runtime-verification.json
+```
+
+This command requires the local service to be running and remains deterministic;
+it does not call OpenRouter or any publishing API.
+
 Every push to `main` and every pull request also runs the focused source
 verification workflow in `.github/workflows/verify.yml`. The workflow installs
 the declared pipeline dependency, compiles the application, and runs both

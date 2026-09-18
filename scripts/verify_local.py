@@ -81,6 +81,7 @@ def evidence_check() -> dict[str, object]:
         "examples/idempotency-run/run-summary.json",
         "examples/security-boundary-run/run-summary.json",
         "examples/fresh-runtime-run/run-summary.json",
+        "examples/runtime-verifier-run/run-summary.json",
     ]
     missing = [path for path in required if not (ROOT / path).is_file()]
     return {
