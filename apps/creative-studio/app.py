@@ -351,6 +351,26 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
     if unsupported_targets:
         raise ValueError(f"unsupported output target(s): {', '.join(unsupported_targets)}")
 
+    idempotency_key = str(payload.get("idempotency_key", "")).strip()
+    pipeline = import_pipeline()
+    source = validate_source(payload.get("source") or fixture_property(), pipeline)
+    request_fingerprint = digest_json(
+        {
+            "prompt": prompt,
+            "provider": provider,
+            "output_targets": output_targets,
+            "source": source,
+        }
+    )
+    if idempotency_key:
+        for existing in list_runs():
+            existing_request = existing.get("request") or {}
+            if existing_request.get("idempotency_key") != idempotency_key:
+                continue
+            if existing_request.get("fingerprint") != request_fingerprint:
+                raise ValueError("idempotency key is already bound to a different request")
+            return existing
+
     run_id = run_id or f"run-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
     run_dir = RUNS_ROOT / run_id
     if run_dir.exists():
@@ -363,9 +383,9 @@ def create_run(payload: dict[str, Any], run_id: str | None = None, run_checks: b
         "output_targets": output_targets,
         "created_at": utc_now(),
         "external_effects": "NOT_ATTEMPTED",
+        "idempotency_key": idempotency_key or None,
+        "fingerprint": request_fingerprint,
     }
-    pipeline = import_pipeline()
-    source = validate_source(payload.get("source") or fixture_property(), pipeline)
     write_json(run_dir / "request.json", request)
     write_json(run_dir / "inputs" / "source.json", source)
     images_dir = run_dir / "inputs" / "images"

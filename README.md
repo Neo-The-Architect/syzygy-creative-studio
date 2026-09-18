@@ -35,6 +35,10 @@ source/plan hashes and passing HyperFrames check and snapshot evidence can call
 size, quality, and `ffprobe` metadata; a changed source or plan fails closed as
 `STALE_APPROVAL`.
 
+Clients that may retry a request can include an `idempotency_key` in the run
+payload. The service stores a request fingerprint, returns the original run for
+an identical retry, and rejects reuse of that key for changed content.
+
 ## Run the application
 
 Requirements:

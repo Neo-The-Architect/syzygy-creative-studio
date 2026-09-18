@@ -63,6 +63,34 @@ class CreativeStudioMvpTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported output target"):
             app.create_run({"prompt": "Reject unknown adapter", "output_targets": ["teleporter"]}, run_id="run-test-003b", run_checks=False)
 
+    def test_idempotency_key_returns_original_run(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            app.RUNS_ROOT = Path(temp) / "runs"
+            os.environ["SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES"] = "1"
+            try:
+                payload = {"prompt": "Retry-safe run", "idempotency_key": "request-001"}
+                first = app.create_run(payload, run_id="run-test-idempotent-001")
+                second = app.create_run(payload, run_id="run-test-idempotent-002")
+                self.assertEqual(first["run_id"], second["run_id"])
+                self.assertEqual(len(list((app.RUNS_ROOT).glob("*/run.json"))), 1)
+            finally:
+                app.RUNS_ROOT = old_runs
+                os.environ.pop("SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES", None)
+
+    def test_idempotency_key_conflict_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_runs = app.RUNS_ROOT
+            app.RUNS_ROOT = Path(temp) / "runs"
+            os.environ["SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES"] = "1"
+            try:
+                app.create_run({"prompt": "Original", "idempotency_key": "request-002"}, run_id="run-test-idempotent-003")
+                with self.assertRaisesRegex(ValueError, "already bound"):
+                    app.create_run({"prompt": "Changed", "idempotency_key": "request-002"}, run_id="run-test-idempotent-004")
+            finally:
+                app.RUNS_ROOT = old_runs
+                os.environ.pop("SYZYGY_CREATIVE_STUDIO_SKIP_HYPERFRAMES", None)
+
     def test_custom_source_is_bound_into_plan_and_composition(self):
         with tempfile.TemporaryDirectory() as temp:
             old_runs = app.RUNS_ROOT
