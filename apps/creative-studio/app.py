@@ -30,6 +30,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
+from shortform import preflight_pilot
+
 
 ROOT = Path(__file__).resolve().parent
 _base_candidates = [ROOT, ROOT.parent, *ROOT.parents]
@@ -1142,6 +1144,9 @@ class StudioHandler(BaseHTTPRequestHandler):
         try:
             payload = json.loads(self.rfile.read(length) or b"{}")
             request_path = urlsplit(self.path).path
+            if request_path == "/api/shortform/preflight":
+                self.send_json(preflight_pilot(payload))
+                return
             if request_path == "/api/runs":
                 client_key = str(self.client_address[0])
                 self.send_json(create_run(payload, client_key=client_key), HTTPStatus.CREATED)
